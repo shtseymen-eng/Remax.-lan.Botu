@@ -54,7 +54,7 @@ jobs:
             --hidden-import selenium.webdriver.common.by `
             --hidden-import selenium.webdriver.support.ui `
             --hidden-import selenium.webdriver.support.expected_conditions `
-            src/remax_bot/app.py
+            launcher.py
 
       - name: Windows paketini yukle
         uses: actions/upload-artifact@v4
@@ -107,7 +107,7 @@ jobs:
             --hidden-import selenium.webdriver.common.by \
             --hidden-import selenium.webdriver.support.ui \
             --hidden-import selenium.webdriver.support.expected_conditions \
-            src/remax_bot/app.py
+            launcher.py
 
       - name: APP dosyasini ZIP yap
         run: |

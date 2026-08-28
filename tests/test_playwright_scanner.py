@@ -57,6 +57,7 @@ def test_browser_launch_options_match_visible_successful_probe():
     from remax_bot.playwright_scanner import browser_launch_options
     assert browser_launch_options() == {
         'headless': False,
+        'channel': 'chrome',
         'args': ['--start-maximized'],
     }
 

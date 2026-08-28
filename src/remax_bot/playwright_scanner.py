@@ -25,8 +25,11 @@ MONTHS = "Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kas�
 
 def browser_launch_options() -> dict:
     # This is intentionally the same launch path that was manually verified on macOS.
-    return {"headless": False, "args": ["--start-maximized"]}
-
+    return {
+    "headless": False,
+    "channel": "chrome",
+    "args": ["--start-maximized"],
+}
 
 def is_listing_row_text(text: str) -> bool:
     value = text or ""

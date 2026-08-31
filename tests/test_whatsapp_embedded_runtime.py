@@ -66,12 +66,15 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(bot.running)
         self.assertFalse(bot.active)
 
-    def test_set_group_never_writes_group_name_to_page(self):
+    def test_set_group_searches_only_inside_whatsapp_sidebar(self):
         page=FakePage()
         bot=EmbeddedWhatsAppBot(lambda _:"",page=page,schedule=lambda _ms,fn:fn())
         before=len(page.calls)
         bot.set_group("Bot deneme")
-        self.assertEqual(len(page.calls),before)
+        new_calls=page.calls[before:]
+        self.assertGreaterEqual(len(new_calls),1)
+        self.assertTrue(any('const side=' in script for script in new_calls))
+        self.assertTrue(any('const wanted="Bot deneme"' in script for script in new_calls))
 
     def test_send_single_message(self):
         page=FakePage()

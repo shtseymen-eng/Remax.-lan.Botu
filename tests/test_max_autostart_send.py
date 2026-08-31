@@ -23,6 +23,9 @@ def test_send_has_button_then_enter_fallback():
     assert "KeyboardEvent('keydown'" in send
     assert "key:'Enter'" in send
 
-def test_group_name_is_never_typed_into_message_box():
-    assert "SEARCH_GROUP_JS" not in BOT
-    assert "OPEN_GROUP_JS" not in BOT
+def test_group_search_is_limited_to_whatsapp_sidebar():
+    search=BOT[BOT.index("SEARCH_GROUP_JS"):BOT.index("OPEN_GROUP_JS")]
+    assert "const side=" in search
+    assert "side.querySelectorAll(selector)" in search
+    assert "side.closest?.('#main,footer')" in search
+    assert "document.querySelectorAll(selector)" not in search

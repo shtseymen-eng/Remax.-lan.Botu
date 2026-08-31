@@ -84,11 +84,11 @@ def filter_listings(items,advisor="",transaction="",property_type="",location=""
 def command_help():
     return """RE/MAX ÇARŞI İLAN BOTU KOMUTLARI
 
-#bot başlat
-Botu aktif eder.
+#Max başla
+Max ilan arama botunu aktif eder.
 
-#bot durdur
-Botu durdurur.
+#Max durdur
+Max ilan arama botunu durdurur.
 
 #?
 Komut listesini gösterir.

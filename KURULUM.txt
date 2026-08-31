@@ -1,26 +1,55 @@
-RE/MAX İlan Botu V31.2 Test Fix
+RE/MAX ÇARŞI İlan Botu V32 - MAX WhatsApp Okuyucu
 
-Bu paket uygulama kodunu değiştirmez.
-Sadece GitHub Actions'ta kalan eski WhatsApp regresyon testini V31.1 mesaj okuyucu yapısına uyarlar.
+AMAÇ
+WhatsApp mesaj okuyucuyu, daha önce çalışan Selenium botunda kullanılan
+[data-testid="msg-container"] mesaj yapısına geçirmek ve bot kimliğini MAX yapmak.
 
-DEĞİŞEN DOSYA
-tests/test_whatsapp_group_detection.py
+ÇALIŞMA AKIŞI
+1. Program içindeki WhatsApp Web'de istediğiniz grup veya özel sohbeti açın.
+2. Sol alttaki BOTU BAŞLAT düğmesine basın. Bu düğme mesaj okuyucuyu başlatır.
+3. Açık sohbetin içine:
+   #Max başla
+   yazın.
+4. Max mesajı okursa aynı açık sohbete:
+   "Max: Merhaba, ben Max. İlan arama konusunda size yardımcı olacağım..."
+   mesajını gönderir.
+5. Bundan sonra #?, #danışmanlar, #izmit kiralık 55 bin vb. komutlar aynı açık sohbetten işlenir.
+6. Max'in WhatsApp'a gönderdiği tüm bot mesajları "Max:" ile başlar.
 
-NEDEN?
-Eski test "main.querySelectorAll('[data-id]')" ifadesini zorunlu tutuyordu.
-V31.1 okuyucu açık sohbeti conversationRoot üzerinden bulduğu için bu beklenti artık geçerli değildir.
+MAX DURDURMA
+#Max durdur
 
-YENİ TEST
-- #main varsa kullanıldığını doğrular.
-- conversationRoot yedek yapısını doğrular.
-- Mesaj kutusundan footer üzerinden açık sohbet kökü bulunmasını doğrular.
-- data-id taramasının conversationRoot içine sınırlandığını doğrular.
-- Tek # komut çıkarımını doğrular.
+ÖNEMLİ
+- Belirli bir WhatsApp grup adına bağlı değildir.
+- Program içinde hangi sohbet açıksa o sohbetin mesaj kapsayıcılarını tarar.
+- Özel sohbet ve grup sohbeti aynı okuyucu mantığını kullanır.
+- Ayrı Chrome penceresi açmaz.
+- Eski #bot başlat komutu artık aktivasyon komutu değildir.
+
+KÖK NEDEN
+Önceki gömülü okuyucu WhatsApp'ın #main / footer yapısını esas alıyordu.
+Ekranda sohbet açık olmasına rağmen bu yapı uygulamadaki WhatsApp DOM'u ile
+eşleşmediği için komutlar okunmuyordu.
+Daha önce çalışan Pregate WhatsApp botu ise doğrudan
+[data-testid="msg-container"] kullanıyordu. V32 okuyucu bu seçiciyi esas alır.
 
 GITHUB'A YÜKLEME
-ZIP içindeki tests/test_whatsapp_group_detection.py dosyasını GitHub'da aynı konuma yükleyip mevcut dosyanın üzerine yazın.
-Commit changes yapın.
+src/remax_bot/app.py
+src/remax_bot/whatsapp_bot.py
+src/remax_bot/whatsapp_state.py
+src/remax_bot/importer.py
+tests/test_v30_features.py
+tests/test_whatsapp_group_detection.py
+tests/test_v311_fix.py
+tests/test_max_whatsapp.py
+
+dosyalarını aynı yollarla repo üzerine yükleyin ve Commit changes yapın.
 
 DOĞRULAMA
-- Eski test V31.1 kodunda gerçekten başarısız oldu.
-- Güncellenen test: 3 test geçti.
+Paketteki Max/WhatsApp ve geriye dönük ilgili testler birlikte çalıştırılmıştır.
+Python sözdizimi kontrolleri de çalıştırılmıştır.
+
+NOT
+Otomatik testler DOM seçici ve komut akışını doğrular.
+Gerçek WhatsApp Web üzerinde uçtan uca son doğrulama, yeni APP/EXE açıldıktan sonra
+#Max başla komutuna Max'in cevap vermesiyle yapılır.

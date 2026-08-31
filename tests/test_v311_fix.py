@@ -5,10 +5,10 @@ APP=(ROOT/"src/remax_bot/app.py").read_text(encoding="utf-8")
 BOT=(ROOT/"src/remax_bot/whatsapp_bot.py").read_text(encoding="utf-8")
 
 def test_reader_does_not_depend_only_on_main_id():
-    assert "conversationRoot" in BOT
-    assert "closest('footer')" in BOT or 'closest("footer")' in BOT
+    assert "msgContainers" in BOT
+    assert '[data-testid="msg-container"]' in BOT
     assert "document.body" in BOT
-    assert "root.querySelectorAll" in BOT
+    assert "conversationRoot.querySelectorAll" in BOT
 
 def test_reader_accepts_single_hash_from_open_conversation():
     assert "fullText.startsWith('#')" in BOT

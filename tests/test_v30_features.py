@@ -19,11 +19,11 @@ def test_single_hash_command_is_accepted():
 def test_legacy_double_hash_still_works():
     assert importer.parse_command("#danışmanlar#")["type"]=="advisors"
 
-def test_activation_gate_accepts_single_hash_start_stop():
+def test_activation_gate_uses_max_start_stop():
     gate=ActivationGate()
-    assert gate.handle("#bot başlat")[0]=="started"
+    assert gate.handle("#Max başla")[0]=="started"
     assert gate.handle("#izmit kiralık")[0]=="query"
-    assert gate.handle("#bot durdur")[0]=="stopped"
+    assert gate.handle("#Max durdur")[0]=="stopped"
 
 def test_advisor_list_uses_real_names_and_rejects_page_noise():
     assert hasattr(importer,"advisor_names")

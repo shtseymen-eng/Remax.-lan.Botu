@@ -1,38 +1,31 @@
-RE/MAX İlan Botu V32.5 - WhatsApp Açık Sohbet Fix
+RE/MAX İlan Botu V33 - Selenium MAX
 
-EKRANDAKİ HATANIN KÖK NEDENİ
-WhatsApp sohbeti görünür ve açık olmasına rağmen eski okuyucu açık sohbeti yalnız:
-1) [data-testid="msg-container"]
-2) dar kapsamlı contenteditable mesaj kutusu seçicileri
-ile doğruluyordu.
+Bu sürüm WhatsApp okuma motorunu, çalışan pregate-mail-bot yaklaşımına geçirir.
 
-WhatsApp Web bu DOM alanlarını değiştirdiğinde ekranda mesajlar görünse bile
-okuyucu daha geniş yedek taramaya geçmeden:
-'WhatsApp açık sohbeti bulunamadı'
-diyordu.
+GITHUB'A YÜKLENECEKLER
+1. src/remax_bot/whatsapp_selenium.py  (yeni)
+2. pyproject.toml                       (üzerine yaz)
+3. .github/workflows/main.yml           (üzerine yaz)
+4. tests/test_v33_selenium_max.py       (yeni)
 
-V32.5 DEĞİŞİKLİĞİ
-- Açık sohbet artık birden fazla işaretle doğrulanır:
-  * msg-container
-  * .message-in / .message-out
-  * data-pre-plain-text
-  * #main + sohbet başlığı / mesaj kutusu
-- Yedek mesaj satırları açık sohbet kararından ÖNCE toplanır.
-- Yeni contenteditable / lexical editor tipleri desteklenir.
-- Mesaj gönderme tarafı da aynı geniş composer seçicilerini kullanır.
-- Açık sohbet yine bulunamazsa durum satırında tanı bilgisi gösterilir:
-  main, mesaj seçici sayıları ve mesaj kutusu durumu.
+Ayrıca APP_PY_DEGISIKLIK.txt içindeki iki küçük app.py değişikliğini uygulayın.
 
 KULLANIM
-1. GitHub'da src/remax_bot/whatsapp_bot.py dosyasını bu paketteki dosyayla değiştirin.
-2. tests/test_whatsapp_open_chat_v325.py dosyasını tests klasörüne ekleyin.
-3. Commit changes yapın.
-4. Actions Windows EXE ve macOS APP'i yeniden oluşturacaktır.
-5. Yeni APP açıldığında WhatsApp'ta bir grup veya özel sohbet açın.
-6. BOTU BAŞLAT'a basın.
-7. Sohbete #Max başla yazın.
-8. Max aynı sohbette kendini tanıtmalıdır.
+- Uygulamayı açın.
+- BOTU BAŞLAT'a basın.
+- Chrome WhatsApp Web açılır.
+- İlk kullanımda QR kodu okutun.
+- İstediğiniz grup veya özel sohbeti Chrome'da açın.
+- Sohbete #Max başla yazın.
+- Max aynı açık sohbete kendini tanıtarak cevap verir.
+- Sonra #?, #danışmanlar, #izmit kiralık 55 bin vb. kullanılır.
+- #Max durdur Max komut modunu durdurur.
 
-CANLI DOĞRULAMA
-Otomatik testler DOM kapısının artık eski iki seçiciye bağımlı olmadığını doğrular.
-Gerçek WhatsApp Web ile son doğrulama yeni APP/EXE üzerinde yapılır.
+NEDEN CHROME?
+Pregate-mail-bot'ta çalışan yöntem Selenium + gerçek Chrome profilidir.
+QWebEngine WhatsApp DOM okuyucusundaki kırılgan katman artık Max'in ana okuyucusu değildir.
+
+ÖNEMLİ
+GitHub Actions Selenium'u EXE ve APP içine paketler.
+ChromeDriver dosyası sabit gömülmez. Selenium Manager kurulu Chrome'a uygun sürücüyü çözer.
+Çalışacak bilgisayarda Google Chrome kurulu olmalıdır.

@@ -1,29 +1,26 @@
-RE/MAX ÇARŞI İlan Botu V31.1 Düzeltme Paketi
+RE/MAX İlan Botu V31.2 Test Fix
 
-Bu paket V31 arayüzünü değiştirmeden iki sorunu düzeltir:
+Bu paket uygulama kodunu değiştirmez.
+Sadece GitHub Actions'ta kalan eski WhatsApp regresyon testini V31.1 mesaj okuyucu yapısına uyarlar.
 
-1) WHATSAPP MESAJ OKUYUCU
-- Okuyucu artık yalnızca #main alanına bağlı değildir.
-- Açık sohbet kökü, WhatsApp mesaj kutusundan yukarı doğru bulunur.
-- #main varsa yine kullanılır; yoksa yeni WhatsApp DOM yapısına yedekli geçilir.
-- Tek # komutları korunur: #bot başlat, #?, #danışmanlar vb.
-- Ayrı Chrome penceresi açılmaz.
+DEĞİŞEN DOSYA
+tests/test_whatsapp_group_detection.py
 
-2) ANA SAYFA BOT KOMUT DENEME ALANI
-- Sonuç alanı artık sınırsız büyüyen QLabel değildir.
-- Sabit maksimum yüksekliğe sahip kaydırılabilir QPlainTextEdit kullanılır.
-- ▲ SONUCU GİZLE / ▼ SONUCU GÖSTER düğmesi eklendi.
-- Uzun #? komut listesi WhatsApp alanını aşağı doğru ezmez.
+NEDEN?
+Eski test "main.querySelectorAll('[data-id]')" ifadesini zorunlu tutuyordu.
+V31.1 okuyucu açık sohbeti conversationRoot üzerinden bulduğu için bu beklenti artık geçerli değildir.
+
+YENİ TEST
+- #main varsa kullanıldığını doğrular.
+- conversationRoot yedek yapısını doğrular.
+- Mesaj kutusundan footer üzerinden açık sohbet kökü bulunmasını doğrular.
+- data-id taramasının conversationRoot içine sınırlandığını doğrular.
+- Tek # komut çıkarımını doğrular.
 
 GITHUB'A YÜKLEME
-ZIP içindeki:
-src/remax_bot/app.py
-src/remax_bot/whatsapp_bot.py
-dosyalarını GitHub'da aynı konumlara yükleyip mevcut dosyaların üzerine yazın.
-
-tests/test_v311_fix.py isteğe bağlı regresyon testidir; GitHub'a yüklenebilir.
+ZIP içindeki tests/test_whatsapp_group_detection.py dosyasını GitHub'da aynı konuma yükleyip mevcut dosyanın üzerine yazın.
+Commit changes yapın.
 
 DOĞRULAMA
-- Düzeltme öncesi regresyon testleri başarısız oldu.
-- Düzeltme sonrası testler geçti.
-- app.py ve whatsapp_bot.py py_compile kontrolü başarılı.
+- Eski test V31.1 kodunda gerçekten başarısız oldu.
+- Güncellenen test: 3 test geçti.

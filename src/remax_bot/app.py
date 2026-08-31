@@ -11,7 +11,8 @@ from PySide6.QtWebEngineCore import QWebEngineProfile,QWebEnginePage
 from .core import DB,Listing,source_label
 from .playwright_scanner import PlaywrightScanner
 from .importer import read_list_file,command_response,command_help,advisor_names,filter_listings,price_number
-from .whatsapp_bot import WhatsAppBot
+from .whatsapp_selenium import SeleniumWhatsAppBot
+from . import __version__
 
 BLUE='#0B4DB8';NAVY='#062D69';RED='#E31837';GREEN='#13A84A'
 BG='#F4F7FB';CARD='#FFFFFF';BORDER='#D9E2EF';TEXT='#172033';MUTED='#667085'
@@ -165,7 +166,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         credit.setStyleSheet('color:#D9E6FF;font-size:10px')
         sl.addWidget(credit)
 
-        ver=QLabel('v31.0.0  •  RE/MAX ÇARŞI')
+        ver=QLabel(f'v{__version__}  •  RE/MAX ÇARŞI')
         ver.setAlignment(Qt.AlignCenter)
         ver.setStyleSheet('color:#8FA9CC;font-size:10px')
         sl.addWidget(ver)
@@ -212,7 +213,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         wt.setStyleSheet('font-size:18px;font-weight:900')
         wh.addWidget(wt)
         wh.addStretch()
-        info=QLabel('WhatsApp bu sayfada programın içinde çalışır.')
+        info=QLabel('Bu alan önizlemedir; Max gerçek Chrome WhatsApp oturumunu kullanır.')
         info.setStyleSheet(f'color:{MUTED};font-size:11px')
         wh.addWidget(info)
         wal.addLayout(wh)
@@ -252,7 +253,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         l.addWidget(wa_card,1)
         self.stack.addWidget(p)
 
-        self.wabot=WhatsAppBot(self.wa,lambda text:command_response(self.db.all(),text))
+        self.wabot=SeleniumWhatsAppBot(lambda text:command_response(self.db.all(),text))
         self.wabot.status.connect(self._wa_status)
 
     def _listings(self):
@@ -426,7 +427,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
 
         f=QFormLayout()
         self.group=QLineEdit(self.settings.get('group',''))
-        self.group.setPlaceholderText('İsteğe bağlı. Boşsa açık WhatsApp sohbeti kullanılır.')
+        self.group.setPlaceholderText('Grup/sohbet adı; boşsa Chrome\'da açık sohbet kullanılır.')
         self.sound=QCheckBox('Bildirim sesi açık')
         self.sound.setChecked(self.settings.get('sound',True))
         self.days=QSpinBox()

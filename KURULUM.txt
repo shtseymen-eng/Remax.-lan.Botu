@@ -1,34 +1,25 @@
-REMAX İlan Botu v0.27 Güncelleme Paketi
+RE/MAX İlan Botu v0.28 Güncelleme Paketi
 
-Bu ZIP mevcut GitHub projesinin üzerine uygulanacak güncelleme dosyalarını içerir.
+YENİLİKLER
+- #55 bin# -> 55.000 TL ve altındaki ilanları linkleriyle gönderir.
+- #4 milyon# -> 4.000.000 TL ve altındaki ilanları linkleriyle gönderir.
+- Bölge/tür ile birlikte de çalışır:
+  #izmit kiralık 55 bin#
+  #izmit satılık daire 4 milyon#
+- 55000, 55.000, 4000000 ve 4.000.000 biçimleri de desteklenir.
+- Fiyat sınırı yazıldığında ayrıca "link" kelimesi yazmaya gerek yoktur.
+- Sınırın üstündeki ilanı "en yakın" diye getirmez. Yalnızca fiyat sınırına eşit veya daha düşük ilanları verir.
+- Fiyat sorgularında uygun olan tüm ilanların linkleri listelenir.
+- V27'deki #danışmanlar# ve Türkçe karakter düzenlemeleri korunur.
 
-DEĞİŞEN DOSYALAR
-1) src/remax_bot/importer.py
-   - #danışmanlar# komutu eklendi.
-   - Danışman bazında ilan sayısı, toplam ilan ve toplam danışman sayısı verir.
-   - #? yardım listesi güncellendi.
-   - Türkçe karakterli danışman adları korunur.
+KURULUM
+ZIP içindeki dosyaları GitHub reposunun köküne aynı klasör yapısıyla yükleyin.
+Mevcut dosyaların üzerine yazın ve Commit changes ile kaydedin.
 
-2) src/remax_bot/selenium_whatsapp.py
-   - WhatsApp mesaj gönderiminde Unicode/Türkçe karakter desteği güçlendirildi.
-   - ç Ç ğ Ğ ı İ ö Ö ş Ş ü Ü karakterleri DOM üzerinden doğrudan yazılır.
-   - Clipboard UTF-8 yedek yöntemi düzeltildi.
+Değişen dosyalar:
+src/remax_bot/importer.py
+tests/test_commands.py
+pyproject.toml
 
-3) tests/test_commands.py
-   - #danışmanlar# ve Türkçe karakter testleri eklendi.
-
-UYGULAMA
-ZIP'i açın ve içindeki src ve tests klasörlerini mevcut repo köküne kopyalayın.
-Sorulduğunda mevcut dosyaların üzerine yazın.
-Ardından GitHub'a commit edin. GitHub Actions yeni Windows EXE ve macOS APP paketlerini oluşturacaktır.
-
-Örnek:
-#danışmanlar#
-
-DANIŞMAN İLAN DAĞILIMI
-
-Ayşe Şen: 2 ilan
-Mert Öztürk: 1 ilan
-
-Toplam ilan: 3
-Toplam danışman: 2
+Doğrulama:
+13 otomatik test başarıyla geçti.

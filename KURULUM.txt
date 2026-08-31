@@ -1,23 +1,53 @@
-RE/MAX ÇARŞI İlan Botu v0.30.1 Fix
+RE/MAX ÇARŞI İlan Botu v31.0.0
 
-Bu paket V30'daki tek kalan GitHub Actions test hatasını düzeltir.
+Bu güncelleme yalnızca V30 Ana Sayfasını ikiye bölme hatasını düzeltir.
+Mevcut özellikler silinmez.
 
-DÜZELTME
-src/remax_bot/app.py içindeki WhatsApp QWebEngineProfile ayarına modern Chrome user-agent geri eklendi:
-Chrome/136.0.0.0
+MENÜ
+1. Ana Sayfa
+   - Tam ekran WhatsApp Web
+   - Bot komut test alanı
+   - İlan tablosu burada YOK
 
-Bu değişiklik:
-- V30 tasarımını değiştirmez.
-- WhatsApp'ı yine programın içindeki sekmede kullanır.
-- Ayrı Chrome penceresi açmaz.
-- SEYMEN bandını, filtreleri, bot komutlarını ve ilan ekranını etkilemez.
+2. İlanlar
+   - RE/MAX ÇARŞI / ÇARŞI 2 kaynak seçimi
+   - TARA / GÜNCELLE
+   - Excel / CSV Yükle
+   - Danışman filtresi
+   - Satılık / Kiralık filtresi
+   - Bölge filtresi
+   - Min / Maks fiyat
+   - Arama
+   - Tüm ilanların gerçek tablosu
+   - Toplam ilan sayısı
+
+3. Veri Ekle
+   - Excel/CSV içe aktarma korunur
+   - Manuel ilan ekleme korunur
+
+4. Web Sekmeleri
+   - İlanları ve kaynak sayfalarını web üzerinde kontrol etme korunur
+
+5. Ayarlar
+   - Bot ayarları, komut testi ve komut listesi korunur
+
+SOL ALT
+- BOTU BAŞLAT
+- BOTU DURDUR
+- Bot Durumu
+- SEYMEN bandı
+- S.Seymen tarafından hazırlanmıştır.
 
 GITHUB'A YÜKLEME
-ZIP'i açın.
-src/remax_bot/app.py dosyasını GitHub'da aynı konuma yükleyip mevcut dosyanın üzerine yazın.
-Commit changes yapın.
+ZIP içindeki şu dosyaları repo köküne aynı yollarla yükleyin:
+src/remax_bot/app.py
+pyproject.toml
+tests/test_v30_ui.py
+tests/test_whatsapp_v29.py
+tests/test_v31_layout.py
+
+Mevcut dosyaların üzerine yazıp Commit changes yapın.
 
 DOĞRULAMA
-- Regression test önce başarısız oldu.
-- Düzeltmeden sonra test geçti.
+- V31 yerleşim ve geriye dönük UI testleri geçti.
 - app.py py_compile kontrolü başarılı.

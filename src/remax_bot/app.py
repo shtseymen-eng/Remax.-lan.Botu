@@ -131,7 +131,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
 
         self.stack=QStackedWidget()
         self.nav_buttons=[]
-        for i,t in enumerate(['Ana Sayfa','Veri Ekle','Web Sekmeleri','Ayarlar']):
+        for i,t in enumerate(['Ana Sayfa','İlanlar','Veri Ekle','Web Sekmeleri','Ayarlar']):
             b=QPushButton(t)
             b.setObjectName('nav')
             b.setCheckable(True)
@@ -165,7 +165,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         credit.setStyleSheet('color:#D9E6FF;font-size:10px')
         sl.addWidget(credit)
 
-        ver=QLabel('v30.0.0  •  RE/MAX ÇARŞI')
+        ver=QLabel('v31.0.0  •  RE/MAX ÇARŞI')
         ver.setAlignment(Qt.AlignCenter)
         ver.setStyleSheet('color:#8FA9CC;font-size:10px')
         sl.addWidget(ver)
@@ -174,6 +174,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         outer.addWidget(self.stack,1)
 
         self._home()
+        self._listings()
         self._data()
         self._web()
         self._settings()
@@ -197,30 +198,28 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         title.setStyleSheet('font-size:25px;font-weight:900')
         top.addWidget(title)
         top.addStretch()
-        self.total_label=QLabel('Toplam İlan: 0')
-        self.total_label.setStyleSheet(f'font-size:15px;font-weight:900;color:{BLUE};padding:6px 12px;background:white;border:1px solid {BORDER};border-radius:8px')
-        top.addWidget(self.total_label)
+        self.wa_status_chip=QLabel('Web sekmesi hazır')
+        self.wa_status_chip.setStyleSheet('color:#087A3B;font-weight:800')
+        top.addWidget(self.wa_status_chip)
         l.addLayout(top)
-
-        split=QSplitter(Qt.Vertical)
 
         wa_card=QFrame()
         wa_card.setObjectName('card')
         wal=QVBoxLayout(wa_card)
+
         wh=QHBoxLayout()
         wt=QLabel('WhatsApp Web')
         wt.setStyleSheet('font-size:18px;font-weight:900')
         wh.addWidget(wt)
         wh.addStretch()
-        self.wa_status_chip=QLabel('Web sekmesi hazır')
-        self.wa_status_chip.setStyleSheet('color:#087A3B;font-weight:800')
-        wh.addWidget(self.wa_status_chip)
+        info=QLabel('WhatsApp bu sayfada programın içinde çalışır.')
+        info.setStyleSheet(f'color:{MUTED};font-size:11px')
+        wh.addWidget(info)
         wal.addLayout(wh)
 
         self.wa=QWebEngineView()
         self.wa.setPage(QWebEnginePage(self.wa_profile,self.wa))
         self.wa.setUrl(QUrl('https://web.whatsapp.com/'))
-        self.wa.setMinimumHeight(300)
         wal.addWidget(self.wa,1)
 
         cmdrow=QHBoxLayout()
@@ -238,25 +237,48 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.quick_result.setStyleSheet(f'color:{MUTED};font-size:11px')
         wal.addWidget(self.quick_result)
 
+        l.addWidget(wa_card,1)
+        self.stack.addWidget(p)
+
+        self.wabot=WhatsAppBot(self.wa,lambda text:command_response(self.db.all(),text))
+        self.wabot.status.connect(self._wa_status)
+
+    def _listings(self):
+        p,l=self._page()
+
+        top=QHBoxLayout()
+        title=QLabel('İlanlar')
+        title.setStyleSheet('font-size:25px;font-weight:900')
+        top.addWidget(title)
+        top.addStretch()
+        self.total_label=QLabel('Toplam İlan: 0')
+        self.total_label.setStyleSheet(f'font-size:15px;font-weight:900;color:{BLUE};padding:6px 12px;background:white;border:1px solid {BORDER};border-radius:8px')
+        top.addWidget(self.total_label)
+        l.addLayout(top)
+
         listing_card=QFrame()
         listing_card.setObjectName('card')
         ll=QVBoxLayout(listing_card)
 
         lh=QHBoxLayout()
-        lt=QLabel('İlanlar')
+        lt=QLabel('İlan Tarama ve İlan Havuzu')
         lt.setStyleSheet('font-size:18px;font-weight:900')
         lh.addWidget(lt)
+
         self.source_combo=QComboBox()
         self.source_combo.addItems(list(SOURCES.keys()))
         lh.addWidget(self.source_combo)
+
         scan=QPushButton('TARA / GÜNCELLE')
         scan.setObjectName('blue')
         scan.clicked.connect(self.scan_selected)
         lh.addWidget(scan)
+
         importb=QPushButton('EXCEL / CSV YÜKLE')
         importb.setObjectName('ghost')
         importb.clicked.connect(self.import_file)
         lh.addWidget(importb)
+
         lh.addStretch()
         self.scanstatus=QLabel('Beklemede')
         self.scanprog=QLabel('0 / 0')
@@ -264,26 +286,39 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         lh.addWidget(self.scanprog)
         ll.addLayout(lh)
 
+        note=QLabel('TARA / GÜNCELLE seçilen RE/MAX kaynağını açar, portföyleri tarar ve bulunan ilanları ilan havuzunda günceller.')
+        note.setWordWrap(True)
+        note.setStyleSheet(f'color:{MUTED};font-size:11px;padding:2px 0 6px 0')
+        ll.addWidget(note)
+
         filters=QHBoxLayout()
         self.advisor_filter=QComboBox()
         self.advisor_filter.addItem('Tüm Danışmanlar')
         self.advisor_filter.currentTextChanged.connect(self.apply_filters)
+
         self.trans_filter=QComboBox()
         self.trans_filter.addItems(['Tümü','Satılık','Kiralık'])
+
         self.location_filter=QLineEdit()
         self.location_filter.setPlaceholderText('İl / ilçe / mahalle')
+
         self.min_price=QLineEdit()
         self.min_price.setPlaceholderText('Min fiyat')
+
         self.max_price=QLineEdit()
         self.max_price.setPlaceholderText('Maks fiyat')
+
         self.searchbox=QLineEdit()
         self.searchbox.setPlaceholderText('Kelime, ilan no, mahalle...')
+
         for w in [self.advisor_filter,self.trans_filter,self.location_filter,self.min_price,self.max_price,self.searchbox]:
             filters.addWidget(w)
+
         searchb=QPushButton('ARA')
         searchb.setObjectName('blue')
         searchb.clicked.connect(self.apply_filters)
         filters.addWidget(searchb)
+
         clear=QPushButton('TEMİZLE')
         clear.setObjectName('ghost')
         clear.clicked.connect(self.clear_filters)
@@ -291,22 +326,18 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         ll.addLayout(filters)
 
         self.table=QTableWidget(0,11)
-        self.table.setHorizontalHeaderLabels(['Kaynak','Danışman / İlan Sahibi','Telefon','Başlık','Fiyat','Bölge','Oda','m²','Tür','İlan Tarihi','İlan Linki'])
+        self.table.setHorizontalHeaderLabels([
+            'Kaynak','Danışman / İlan Sahibi','Telefon','Başlık','Fiyat',
+            'Bölge','Oda','m²','Tür','İlan Tarihi','İlan Linki'
+        ])
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         [self.table.horizontalHeader().setSectionResizeMode(c,QHeaderView.Stretch) for c in [1,3,5,10]]
         self.table.cellDoubleClicked.connect(self.open_link)
         ll.addWidget(self.table,1)
 
-        split.addWidget(wa_card)
-        split.addWidget(listing_card)
-        split.setStretchFactor(0,1)
-        split.setStretchFactor(1,2)
-        l.addWidget(split,1)
+        l.addWidget(listing_card,1)
         self.stack.addWidget(p)
-
-        self.wabot=WhatsAppBot(self.wa,lambda text:command_response(self.db.all(),text))
-        self.wabot.status.connect(self._wa_status)
 
         self.sc=PlaywrightScanner(app_data()/'browser-profile')
         self.sc.progress.connect(self.scanprog.setText)
@@ -549,8 +580,8 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
     def open_link(self,row,col):
         x=self.table.item(row,10)
         if x and x.text():
-            self._go(2)
-            self.nav_buttons[2].setChecked(True)
+            self._go(3)
+            self.nav_buttons[3].setChecked(True)
             self.browser.setUrl(QUrl(x.text()))
 
     def scan_verification(self,msg):

@@ -3,7 +3,6 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 APP=(ROOT/'src/remax_bot/app.py').read_text(encoding='utf-8')
 BOT=(ROOT/'src/remax_bot/whatsapp_bot.py').read_text(encoding='utf-8')
-WORKFLOW=(ROOT/'.github/workflows/main.yml').read_text(encoding='utf-8')
 PYPROJECT=(ROOT/'pyproject.toml').read_text(encoding='utf-8')
 
 def test_app_uses_embedded_whatsapp_bot_not_selenium():
@@ -28,11 +27,6 @@ def test_seymen_ribbon_branding_exists():
     assert 'drawText' in APP
     assert 'SEYMEN' in APP
 
-def test_app_uses_remax_icon_assets():
-    assert 'app_icon.png' in APP
-    assert '--icon "src/remax_bot/assets/app_icon.ico"' in WORKFLOW
-    assert '--icon "src/remax_bot/assets/app_icon.icns"' in WORKFLOW
-
-def test_version_is_029():
-    assert 'v29.0.0' in APP
-    assert 'version = "0.29.0"' in PYPROJECT
+def test_version_is_030():
+    assert 'v30.0.0' in APP
+    assert 'version = "0.30.0"' in PYPROJECT

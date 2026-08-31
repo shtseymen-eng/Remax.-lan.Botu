@@ -1,16 +1,39 @@
-RE/MAX İlan Botu v0.29.2 CI Fix
+RE/MAX ÇARŞI İLAN BOTU v0.30
 
-Bu paket, son GitHub Actions çalışmasındaki kalan 2 test hatasını düzeltir.
+Bu paket mevcut GitHub projesinin üzerine uygulanacak V30 güncellemesidir.
 
-1) tests/test_whatsapp_v24.py
-Eski V24 testi yalnızca eski durum metnini bekliyordu.
-V29'da doğru yeni metin olan "Dinleniyor: uygulama içi WhatsApp açık sohbeti" de kabul ediliyor.
+ANA DEĞİŞİKLİKLER
+- Program doğrudan Ana Sayfa ile açılır.
+- Ana Sayfada uygulama içi WhatsApp Web alanı bulunur. Ayrı Chrome açılmaz.
+- WhatsApp alanının altında gerçek ilan havuzu ve filtreler bulunur.
+- İlan toplamı üstte görünür.
+- Danışman filtresi, Danışman / İlan Sahibi sütunundan gerçek kişi adlarını çıkarır.
+- Portföy No, Kocaeli / İzmit, Detaylı Bilgi gibi hatalı danışman değerleri filtre listesinden ayıklanır.
+- Danışman seçildiğinde ilan tablosu otomatik filtrelenir.
+- Satılık/Kiralık, bölge, min-maks fiyat ve kelime araması birlikte kullanılabilir.
+- RE/MAX ÇARŞI ve RE/MAX ÇARŞI 2 tarama kaynakları Ana Sayfadan çalıştırılır.
+- Excel/CSV ve manuel ilan ekleme korunur.
+- Sol menünün altında BOTU BAŞLAT / BOTU DURDUR ve küçük durum göstergesi bulunur.
+- Sol altta tırtıklı SEYMEN bandı ve "S.Seymen tarafından hazırlanmıştır." bilgisi bulunur.
+- Ayarlar ekranında Bot Komut Testi + Komut Listesi korunur.
+- Komutlarda artık sadece başta tek # yeterlidir:
+    #bot başlat
+    #bot durdur
+    #danışmanlar
+    #izmit kiralık 55 bin
+    #izmit satılık daire 4 milyon
+- Eski #komut# biçimi de çalışmaya devam eder.
+- Fiyat üst sınırı sorguları uygun ilanların linklerini otomatik gönderir.
+- Sürüm: 0.30.0
 
-2) .github/workflows/main.yml
-V29 testinin beklediği RE/MAX uygulama ikonları build komutuna eklendi:
-Windows: app_icon.ico
-macOS: app_icon.icns
+ÖNEMLİ: myRE/MAX ayrı giriş portalı için doğrudan otomatik tarama bu pakete eklenmedi.
+Bunun nedeni portal giriş URL'si / ilan ekranı yapısının henüz verilmemiş olmasıdır.
+Mevcut çalışan RE/MAX ÇARŞI ve ÇARŞI 2 tarama altyapısı korunmuştur.
 
-Ayrıca artık kullanılmayan Selenium paketleme satırları kaldırıldı.
+GITHUB'A YÜKLEME
+ZIP'i açın ve içindeki klasörleri repo köküne aynı klasör yapısıyla yükleyin.
+Mevcut dosyaların üzerine yazın ve Commit changes yapın.
 
-ZIP'i repo köküne yükleyin, mevcut iki dosyanın üzerine yazın ve Commit changes yapın.
+DOĞRULAMA
+- V30 test paketi: 29 test geçti.
+- app.py, importer.py, whatsapp_state.py ve whatsapp_bot.py py_compile kontrolü başarılı.

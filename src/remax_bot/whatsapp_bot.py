@@ -7,20 +7,72 @@ from .whatsapp_state import ActivationGate
 # Eski biçim #bot başlat# da ActivationGate tarafından desteklenir.
 POLL_JS=r"""(() => {
  const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
- const main=document.querySelector('#main'); if(!main)return {isOpen:false,messages:[]};
- const messages=[],seenRows=new Set();
- const rows=[...Array.from(main.querySelectorAll('.message-in,.message-out')),...Array.from(main.querySelectorAll('[data-id]')),...Array.from(main.querySelectorAll('[data-pre-plain-text]')).map(x=>x.closest('[data-id],.message-in,.message-out')||x.parentElement)].filter(Boolean);
- for(const row0 of rows.slice(-180)){
-   const row=row0.closest?.('.message-in,.message-out,[data-id]')||row0; if(!row||seenRows.has(row))continue; seenRows.add(row);
-   const direction=row.classList?.contains('message-out')?'out':'in';
-   const meta=row.querySelector?.('[data-pre-plain-text]'); const pre=meta?.getAttribute('data-pre-plain-text')||'';
-   const copyable=row.querySelector?.('[class*="copyable-text"]'); let fullText=clean(copyable?.innerText||row.innerText||''); if(!fullText)continue;
-   let commands=fullText.match(/#[^#\n]+#/g)||[]; if(!commands.length && fullText.startsWith('#'))commands=[fullText]; if(!commands.length)continue;
-   let sender='',stamp=''; const m=pre.match(/^\[([^\]]+)\]\s*([^:]+):/); if(m){stamp=clean(m[1]);sender=clean(m[2]);}
-   if(!sender)sender=direction==='out'?'Siz':'Kullanıcı';
-   const id=row.getAttribute?.('data-id')||row.closest?.('[data-id]')?.getAttribute('data-id')||'';
-   commands.forEach((cmd,idx)=>messages.push({sender,text:clean(cmd),stamp,pre,id:id?id+':'+idx:'',direction}));
+
+ const inputBox=
+   document.querySelector('footer div[contenteditable="true"][role="textbox"]') ||
+   document.querySelector('footer [contenteditable="true"]') ||
+   document.querySelector('div[contenteditable="true"][role="textbox"]');
+
+ let conversationRoot=document.querySelector('#main');
+
+ // WhatsApp zaman zaman #main kimliğini değiştirdiği için açık konuşmayı
+ // mesaj kutusundan yukarı doğru bularak yedekliyoruz.
+ if(!conversationRoot && inputBox){
+   let root=inputBox.closest('footer') || inputBox.parentElement;
+   while(root && root!==document.body){
+     const count=root.querySelectorAll('.message-in,.message-out,[data-id],[data-pre-plain-text]').length;
+     if(count>0){
+       conversationRoot=root;
+       break;
+     }
+     root=root.parentElement;
+   }
  }
+
+ if(!conversationRoot){
+   return {isOpen:false,messages:[],reason:inputBox?'conversation-root-not-found':'message-box-not-found'};
+ }
+
+ const messages=[],seenRows=new Set();
+ const rows=[
+   ...Array.from(conversationRoot.querySelectorAll('.message-in,.message-out')),
+   ...Array.from(conversationRoot.querySelectorAll('[data-id]')),
+   ...Array.from(conversationRoot.querySelectorAll('[data-pre-plain-text]')).map(x=>x.closest('[data-id],.message-in,.message-out')||x.parentElement)
+ ].filter(Boolean);
+
+ for(const row0 of rows.slice(-220)){
+   const row=row0.closest?.('.message-in,.message-out,[data-id]')||row0;
+   if(!row||seenRows.has(row))continue;
+   seenRows.add(row);
+
+   const direction=row.classList?.contains('message-out')?'out':'in';
+   const meta=row.querySelector?.('[data-pre-plain-text]');
+   const pre=meta?.getAttribute('data-pre-plain-text')||'';
+
+   const copyable=row.querySelector?.('[class*="copyable-text"]');
+   let fullText=clean(copyable?.innerText||row.innerText||'');
+   if(!fullText)continue;
+
+   let commands=fullText.match(/#[^#\n]+#/g)||[];
+   if(!commands.length && fullText.startsWith('#'))commands=[fullText];
+   if(!commands.length)continue;
+
+   let sender='',stamp='';
+   const m=pre.match(/^\[([^\]]+)\]\s*([^:]+):/);
+   if(m){stamp=clean(m[1]);sender=clean(m[2]);}
+   if(!sender)sender=direction==='out'?'Siz':'Kullanıcı';
+
+   const id=row.getAttribute?.('data-id')||row.closest?.('[data-id]')?.getAttribute('data-id')||'';
+   commands.forEach((cmd,idx)=>messages.push({
+     sender,
+     text:clean(cmd),
+     stamp,
+     pre,
+     id:id?id+':'+idx:'',
+     direction
+   }));
+ }
+
  return {isOpen:true,messages};
 })()"""
 SEND_JS=r"""((message)=>{const main=document.querySelector('#main');if(!main)return {ok:false,error:'Açık WhatsApp sohbeti bulunamadı'};const box=main.querySelector('footer div[contenteditable="true"][role="textbox"]')||main.querySelector('footer [contenteditable="true"]')||main.querySelector('div[contenteditable="true"][role="textbox"]');if(!box)return {ok:false,error:'Mesaj kutusu bulunamadı'};box.focus();document.execCommand('selectAll',false,null);document.execCommand('insertText',false,String(message));box.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:String(message)}));const send=main.querySelector('button[aria-label="Gönder"],button[aria-label="Send"],[data-testid="send"],[data-icon="send"]')?.closest('button,[role="button"]')||main.querySelector('button[aria-label="Gönder"],button[aria-label="Send"],[data-testid="send"]');if(send){send.click();return {ok:true};}box.dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,cancelable:true,key:'Enter',code:'Enter',keyCode:13,which:13}));box.dispatchEvent(new KeyboardEvent('keyup',{bubbles:true,cancelable:true,key:'Enter',code:'Enter',keyCode:13,which:13}));return {ok:true};})"""

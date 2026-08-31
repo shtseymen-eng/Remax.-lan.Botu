@@ -1,53 +1,29 @@
-RE/MAX ÇARŞI İlan Botu v31.0.0
+RE/MAX ÇARŞI İlan Botu V31.1 Düzeltme Paketi
 
-Bu güncelleme yalnızca V30 Ana Sayfasını ikiye bölme hatasını düzeltir.
-Mevcut özellikler silinmez.
+Bu paket V31 arayüzünü değiştirmeden iki sorunu düzeltir:
 
-MENÜ
-1. Ana Sayfa
-   - Tam ekran WhatsApp Web
-   - Bot komut test alanı
-   - İlan tablosu burada YOK
+1) WHATSAPP MESAJ OKUYUCU
+- Okuyucu artık yalnızca #main alanına bağlı değildir.
+- Açık sohbet kökü, WhatsApp mesaj kutusundan yukarı doğru bulunur.
+- #main varsa yine kullanılır; yoksa yeni WhatsApp DOM yapısına yedekli geçilir.
+- Tek # komutları korunur: #bot başlat, #?, #danışmanlar vb.
+- Ayrı Chrome penceresi açılmaz.
 
-2. İlanlar
-   - RE/MAX ÇARŞI / ÇARŞI 2 kaynak seçimi
-   - TARA / GÜNCELLE
-   - Excel / CSV Yükle
-   - Danışman filtresi
-   - Satılık / Kiralık filtresi
-   - Bölge filtresi
-   - Min / Maks fiyat
-   - Arama
-   - Tüm ilanların gerçek tablosu
-   - Toplam ilan sayısı
-
-3. Veri Ekle
-   - Excel/CSV içe aktarma korunur
-   - Manuel ilan ekleme korunur
-
-4. Web Sekmeleri
-   - İlanları ve kaynak sayfalarını web üzerinde kontrol etme korunur
-
-5. Ayarlar
-   - Bot ayarları, komut testi ve komut listesi korunur
-
-SOL ALT
-- BOTU BAŞLAT
-- BOTU DURDUR
-- Bot Durumu
-- SEYMEN bandı
-- S.Seymen tarafından hazırlanmıştır.
+2) ANA SAYFA BOT KOMUT DENEME ALANI
+- Sonuç alanı artık sınırsız büyüyen QLabel değildir.
+- Sabit maksimum yüksekliğe sahip kaydırılabilir QPlainTextEdit kullanılır.
+- ▲ SONUCU GİZLE / ▼ SONUCU GÖSTER düğmesi eklendi.
+- Uzun #? komut listesi WhatsApp alanını aşağı doğru ezmez.
 
 GITHUB'A YÜKLEME
-ZIP içindeki şu dosyaları repo köküne aynı yollarla yükleyin:
+ZIP içindeki:
 src/remax_bot/app.py
-pyproject.toml
-tests/test_v30_ui.py
-tests/test_whatsapp_v29.py
-tests/test_v31_layout.py
+src/remax_bot/whatsapp_bot.py
+dosyalarını GitHub'da aynı konumlara yükleyip mevcut dosyaların üzerine yazın.
 
-Mevcut dosyaların üzerine yazıp Commit changes yapın.
+tests/test_v311_fix.py isteğe bağlı regresyon testidir; GitHub'a yüklenebilir.
 
 DOĞRULAMA
-- V31 yerleşim ve geriye dönük UI testleri geçti.
-- app.py py_compile kontrolü başarılı.
+- Düzeltme öncesi regresyon testleri başarısız oldu.
+- Düzeltme sonrası testler geçti.
+- app.py ve whatsapp_bot.py py_compile kontrolü başarılı.

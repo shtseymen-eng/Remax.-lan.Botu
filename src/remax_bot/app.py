@@ -232,9 +232,21 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         cmdrow.addWidget(sendcmd)
         wal.addLayout(cmdrow)
 
-        self.quick_result=QLabel('Komutun yalnızca başında # olması yeterlidir.')
-        self.quick_result.setWordWrap(True)
-        self.quick_result.setStyleSheet(f'color:{MUTED};font-size:11px')
+        result_head=QHBoxLayout()
+        result_label=QLabel('Bot Komut Sonucu')
+        result_label.setStyleSheet(f'color:{MUTED};font-size:11px;font-weight:800')
+        self.quick_toggle=QPushButton('▲ SONUCU GİZLE')
+        self.quick_toggle.setObjectName('ghost')
+        self.quick_toggle.clicked.connect(self.toggle_quick_result)
+        result_head.addWidget(result_label)
+        result_head.addStretch()
+        result_head.addWidget(self.quick_toggle)
+        wal.addLayout(result_head)
+
+        self.quick_result=QPlainTextEdit()
+        self.quick_result.setReadOnly(True)
+        self.quick_result.setMaximumHeight(150)
+        self.quick_result.setPlainText('Komutun yalnızca başında # olması yeterlidir.')
         wal.addWidget(self.quick_result)
 
         l.addWidget(wa_card,1)
@@ -562,7 +574,14 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
 
     def quick_test(self):
         out=command_response(self.db.all(),self.quick_cmd.text().strip())
-        self.quick_result.setText(out or 'Bot bu mesajı görmezden gelir.')
+        self.quick_result.setPlainText(out or 'Bot bu mesajı görmezden gelir.')
+        self.quick_result.setVisible(True)
+        self.quick_toggle.setText('▲ SONUCU GİZLE')
+
+    def toggle_quick_result(self):
+        visible=self.quick_result.isVisible()
+        self.quick_result.setVisible(not visible)
+        self.quick_toggle.setText('▼ SONUCU GÖSTER' if visible else '▲ SONUCU GİZLE')
 
     def test_command(self):
         out=command_response(self.db.all(),self.cmdtest.text().strip())

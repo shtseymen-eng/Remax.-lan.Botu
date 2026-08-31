@@ -76,6 +76,18 @@ def test_parse_listing_detail_replaces_store_name_with_named_advisor():
     assert item.advisor == 'Ayşe Yılmaz'
 
 
+def test_parse_listing_detail_replaces_portfolio_label_with_named_advisor():
+    item = parse_listing_detail(
+        text='İlan No: 1234567890\nYetkili Gayrimenkul Danışmanı:\nAyşe Yılmaz',
+        url='https://www.sahibinden.com/ilan/x-1234567890/detay',
+        source_url='https://carsigayrimenkulkocaeli.sahibinden.com/',
+        title='Satılık Daire',
+        advisor='Portföy No',
+    )
+
+    assert item.advisor == 'Ayşe Yılmaz'
+
+
 def test_detects_human_verification():
     assert is_human_verification('Lütfen robot olmadığınızı doğrulayın')
     assert is_human_verification('CAPTCHA güvenlik kontrolü')

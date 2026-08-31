@@ -95,7 +95,11 @@ class MessageRouter:
         self.primed_chats = set()
 
     def set_group(self, group: str):
-        self.configured_group = " ".join(str(group or "").split())
+        configured_group = " ".join(str(group or "").split())
+        if _normalized(configured_group) == _normalized(self.configured_group):
+            self.configured_group = configured_group
+            return
+        self.configured_group = configured_group
         self.locked_chat_id = ""
         self.locked_chat_title = ""
         self.active = False

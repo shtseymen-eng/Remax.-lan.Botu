@@ -1,4 +1,4 @@
-RE/MAX İlan Botu V0.38 - Çoklu İlan Kaynağı
+RE/MAX İlan Botu V0.38.1 - Tarama ve WhatsApp Düzeltmeleri
 
 ÇALIŞMA ŞEKLİ
 1. Uygulama içindeki WhatsApp Web panelinde oturum açın.
@@ -14,5 +14,11 @@ V0.38 YENİLİKLERİ
 - #danışmanlar komutu her danışmanın her sitedeki ilan adetlerini gösterir.
 - Bot Testi ayrı sol menü sayfasına taşındı; Ana Sayfa yalnızca WhatsApp panelini gösterir.
 - Eksik veya başarısız taramada ilgili kaynağın önceki ilanları korunur.
+
+V0.38.1 DÜZELTMELERİ
+- Aynı grupta yeniden başlatıldığında WhatsApp mesaj geçmişi sıfırlanmaz.
+- Kullanıcının kendi yazdığı #Max komutları da okunup cevaplanır.
+- Emlakjet ilanlarının ikinci sayfası taranır.
+- Danışman adı alanına İlan No, Portföy No ve benzeri sayfa metinleri yazılmaz.
 
 Hazır Windows ve macOS paketleri GitHub Actions bölümündeki son başarılı çalıştırmanın Artifacts alanındadır.

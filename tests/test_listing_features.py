@@ -26,6 +26,13 @@ def test_advisor_list_uses_real_names_and_rejects_page_noise():
     assert importer.advisor_names(sample()) == ["Murat Şenoğlu", "Mustafa Mert Yılmaz"]
 
 
+def test_advisor_display_name_never_exposes_page_noise():
+    display=getattr(importer,"advisor_display_name",lambda _name:"")
+    assert display("  Murat Şenoğlu  ") == "Murat Şenoğlu"
+    assert display("Portföy No") == "Belirtilmemiş"
+    assert display("İlan Numarası") == "Belirtilmemiş"
+
+
 def test_listing_filter_combines_advisor_and_price():
     rows = importer.filter_listings(sample(), advisor="Murat Şenoğlu", max_price=60000)
     assert [item.listing_id for item in rows] == ["1"]

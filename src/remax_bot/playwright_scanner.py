@@ -19,6 +19,7 @@ except ImportError:
             pass
 
 from .core import Listing, source_key
+from .importer import is_valid_advisor
 
 MONTHS = "Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık"
 
@@ -86,6 +87,14 @@ def extract_emlakjet_listing_links(hrefs: list[str], base_url: str) -> list[str]
             seen.add(key); out.append(url)
     return out
 
+def extract_emlakjet_advisor(links: list[dict]) -> str:
+    for item in links or []:
+        href=str((item or {}).get("href") or "").strip()
+        text=" ".join(str((item or {}).get("text") or "").split())
+        if re.fullmatch(r"/danismanlar/[^/]+-\d+",urlsplit(href).path.rstrip("/"),re.I) and is_valid_advisor(text):
+            return text
+    return ""
+
 def extract_sahibinden_listing_links(hrefs: list[str], base_url: str) -> list[str]:
     out=[]; seen=set()
     for href in hrefs:
@@ -135,14 +144,17 @@ def parse_remax_detail(*, text: str, url: str, source_url: str) -> Listing:
     gross=_label_value(lines,"m2 (Brüt)","m² (Brüt)","m²","m2")
     date=_label_value(lines,"Yayınlanma Tarihi")
     phone=_extract_phone(text)
-    advisor=""
-    if phone:
+    advisor=_label_value(lines,"Gayrimenkul Danışmanı","Danışman")
+    if not is_valid_advisor(advisor):
+        advisor=""
+    if not advisor and phone:
         phone_digits=re.sub(r"\D","",phone)[-10:]
         for i,x in enumerate(lines):
             if phone_digits and phone_digits in re.sub(r"\D","",x):
                 for cand in reversed(lines[max(0,i-7):i]):
-                    if 4<=len(cand)<=80 and not re.search(r"\d|/",cand) and not re.search(r"iletişim|sertifika|re/max|emlak endeksi|oda sayısı",cand,re.I):
-                        advisor=re.sub(r"\s+Çarşı(?:\s+2)?$","",cand,flags=re.I).strip(); break
+                    candidate=re.sub(r"\s+Çarşı(?:\s+2)?$","",cand,flags=re.I).strip()
+                    if 4<=len(cand)<=80 and not re.search(r"\d|/",cand) and is_valid_advisor(candidate):
+                        advisor=candidate; break
                 break
     location=""
     for x in lines:
@@ -194,9 +206,17 @@ def parse_emlakjet_detail(*,text:str,url:str,source_url:str,title:str="",price:s
     if location_match:
         neighborhood,district,province=(part.strip() for part in location_match.groups())
         location=" / ".join((province,district,neighborhood))
-    if not advisor:
-        advisor_match=re.search(r"^([^\n|]{5,70})\s*\|\s*RE/MAX\s+ÇARŞI(?:\s+2)?\s*$",text,re.I|re.M)
-        advisor=advisor_match.group(1).strip() if advisor_match else ""
+    if not is_valid_advisor(advisor):
+        advisor=""
+        for pattern in (
+            r"^([^\n|]{5,70})\s*\|\s*RE/MAX\s+ÇARŞI(?:\s+2)?\s*$",
+            r"^RE/MAX\s+ÇARŞI(?:\s+2)?\s*\n\s*([^\n]{5,70})\s*\n\s*Tüm İlanları\s*$",
+        ):
+            advisor_match=re.search(pattern,text,re.I|re.M)
+            candidate=advisor_match.group(1).strip() if advisor_match else ""
+            if is_valid_advisor(candidate):
+                advisor=candidate
+                break
     if not phone:
         phone=_extract_phone(text)
     return Listing(
@@ -254,14 +274,15 @@ def parse_listing_detail(*, text: str, url: str, source_url: str, title: str = "
     date_match = re.search(rf"\b(\d{{1,2}}\s+(?:{MONTHS})\s+\d{{4}})\b", text, re.I)
     listing_date = date_match.group(1) if date_match else ""
 
-    advisor_is_store=bool(re.search(r"\b(?:re\s*/?\s*max|gayrimenkul|emlak)\b",advisor or "",re.I))
-    if not advisor or advisor_is_store:
+    if not is_valid_advisor(advisor):
+        advisor=""
         adv_match = re.search(
             r"(?:Yetkili\s+(?:Gayrimenkul\s+)?Danışmanı?|Gayrimenkul\s+Danışmanı?|Danışman|İlan Sahibi)\s*[:\n]\s*([^\n]+)",
             text,re.I
         )
-        if adv_match:
-            advisor=adv_match.group(1).strip()
+        candidate=adv_match.group(1).strip() if adv_match else ""
+        if is_valid_advisor(candidate):
+            advisor=candidate
     if not phone:
         phone = _extract_phone(text)
 
@@ -589,6 +610,24 @@ class PlaywrightScanner(QObject):
         page.bring_to_front()
 
     def _next_page(self, page) -> bool:
+        try:
+            current=page.locator('button[aria-current="page"]')
+            if current.count():
+                label=current.first.get_attribute("aria-label") or ""
+                match=re.fullmatch(r"Page\s+(\d+)",label,re.I)
+                if match:
+                    next_label=f"Page {int(match.group(1))+1}"
+                    target=page.locator(f'button[aria-label="{next_label}"]')
+                    if target.count() and target.first.is_visible():
+                        for _attempt in range(3):
+                            target.first.click(timeout=10000,force=True)
+                            for _ in range(30):
+                                page.wait_for_timeout(100)
+                                selected=page.locator('button[aria-current="page"]')
+                                if selected.count() and (selected.first.get_attribute("aria-label") or "") == next_label:
+                                    return True
+        except Exception:
+            pass
         selectors = ['a[rel="next"]', 'a[title*="Sonraki"]', 'a:has-text("Sonraki")', 'button:has-text("Sonraki")']
         for selector in selectors:
             try:
@@ -729,7 +768,14 @@ class PlaywrightScanner(QObject):
             if not self._ensure_not_blocked(page): break
             title=self._first_text(page,["h1",'[class*="title"] h1'])
             text=self._body_text(page)
-            item=parse_emlakjet_detail(text=text,url=page.url,source_url=source_url,title=title)
+            try:
+                profile_links=page.locator('a[href*="/danismanlar/"]').evaluate_all(
+                    "els => els.map(e => ({href:e.href || e.getAttribute('href'), text:e.innerText || e.textContent}))"
+                )
+            except Exception:
+                profile_links=[]
+            advisor=extract_emlakjet_advisor(profile_links)
+            item=parse_emlakjet_detail(text=text,url=page.url,source_url=source_url,title=title,advisor=advisor)
             if not is_valid_detail_listing("emlakjet",text,item,listing_url):
                 raise RuntimeError(f"Emlakjet ilan ayrıntısı doğrulanamadı ({i}/{len(all_links)}). Eski ilanlar korundu.")
             if item.listing_id not in seen_ids:

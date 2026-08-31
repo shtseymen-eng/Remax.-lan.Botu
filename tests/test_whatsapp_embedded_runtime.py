@@ -66,6 +66,18 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(bot.running)
         self.assertFalse(bot.active)
 
+    def test_restarting_same_group_keeps_reader_history_and_answers_new_command(self):
+        page=FakePage()
+        bot=EmbeddedWhatsAppBot(lambda text:f"Sonuç: {text}",page=page,schedule=lambda _ms,fn:fn())
+        bot.start("Bot deneme")
+        bot.router.process(snapshot(title="Bot deneme"))
+
+        bot.start("  Bot deneme  ")
+        result=bot.router.process(snapshot(title="Bot deneme",messages=[{"id":"own-start","text":"#max başla"}]))
+
+        self.assertEqual(result.replies,[MAX_INTRO])
+        self.assertTrue(bot.active)
+
     def test_set_group_searches_only_inside_whatsapp_sidebar(self):
         page=FakePage()
         bot=EmbeddedWhatsAppBot(lambda _:"",page=page,schedule=lambda _ms,fn:fn())

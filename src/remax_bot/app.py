@@ -10,7 +10,7 @@ from PySide6.QtWebEngineCore import QWebEngineProfile,QWebEnginePage
 
 from .core import DB,Listing,source_label,split_listings_by_site
 from .playwright_scanner import PlaywrightScanner
-from .importer import read_list_file,command_response,command_help,advisor_names,filter_listings,price_number
+from .importer import read_list_file,command_response,command_help,advisor_names,advisor_display_name,filter_listings,price_number
 from .whatsapp_webengine import EmbeddedWhatsAppBot
 from . import __version__
 
@@ -521,7 +521,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         table.setRowCount(len(rows))
         for r,x in enumerate(rows):
             vals=[
-                source_label(x.source_url),x.advisor,x.phone,x.title,x.price,x.location,x.rooms,x.sqm,
+                source_label(x.source_url),advisor_display_name(x.advisor),x.phone,x.title,x.price,x.location,x.rooms,x.sqm,
                 ' / '.join(v for v in [x.transaction_type,x.property_type] if v),x.listing_date,x.url
             ]
             for c,v in enumerate(vals):

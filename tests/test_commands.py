@@ -100,3 +100,34 @@ def test_price_query_does_not_truncate_matching_links_to_default_limit():
     r=command_response(many,"#izmit kiralık 55 bin#")
     assert "https://x/14" in r
     assert "14 uygun ilan bulundu" in r
+
+
+def test_link_response_never_displays_listing_label_as_advisor():
+    rows=[
+        Listing(
+            '1','İzmit Satılık Daire','https://x/1','Portföy No','',
+            '4.000.000 TL','Kocaeli İzmit','2+1','Satılık','Daire','90 m2','',
+            'https://remax.com.tr/tr/ofis/detay/carsi',
+        )
+    ]
+
+    response=command_response(rows,'#izmit satılık link')
+
+    assert 'Danışman: Belirtilmemiş' in response
+    assert 'Portföy No' not in response
+
+
+def test_grouped_response_uses_same_placeholder_for_invalid_advisor():
+    rows=[
+        Listing(
+            '1','İzmit Satılık Daire','https://x/1','İlan Numarası','',
+            '4.000.000 TL','Kocaeli İzmit','2+1','Satılık','Daire','90 m2','',
+            'https://www.emlakjet.com/emlak-ofisleri/remax-carsi-1662566',
+        )
+    ]
+
+    response=command_response(rows,'#izmit satılık')
+
+    assert 'Belirtilmemiş: 1 ilan' in response
+    assert 'Danışman belirtilmemiş' not in response
+    assert 'İlan Numarası' not in response

@@ -21,7 +21,8 @@ FIELD_ALIASES={
 NOISE_ADVISOR_TOKENS={
     "portfoy","konum","kocaeli","izmit","detayli","gayrimen","re/max","remax",
     "satilik","kiralik","telefon","iletisim","ada","parsel","mahalle","ilce",
-    "fiyat","aciklama","m2","metrekare","ilan no","portfoy no"
+    "fiyat","aciklama","m2","metrekare","ilan no","ilan numarasi",
+    "portfoy no","portfoy numarasi","yetki belgesi","tum ilanlari"
 }
 def _h(s): return norm(str(s or "")).replace("²","2")
 def _map_headers(headers):
@@ -66,6 +67,9 @@ def is_valid_advisor(name):
     if len(words)<2:return False
     letters=sum(ch.isalpha() for ch in raw)
     return letters >= max(4,int(len(raw)*0.55))
+def advisor_display_name(name):
+    raw=" ".join(str(name or "").split())
+    return raw if is_valid_advisor(raw) else "Belirtilmemiş"
 def _same_advisor_name(left,right):
     a=norm(left).split(); b=norm(right).split()
     if a==b:return True
@@ -205,9 +209,10 @@ def command_response(items,text,limit=12):
     if cmd.get("links") or target is not None:
         lines=[f"{target:,.0f} TL ve altında {len(matches)} uygun ilan bulundu:".replace(",",".")] if target is not None else [f"{len(matches)} uygun ilan bulundu:"]
         for x in (matches if target is not None else matches[:limit]):
-            lines += ["",x.title,f"{x.price} | {x.location}",f"Danışman: {x.advisor or 'Belirtilmemiş'}",x.url or "(link yok)"]
+            advisor=advisor_display_name(x.advisor)
+            lines += ["",x.title,f"{x.price} | {x.location}",f"Danışman: {advisor}",x.url or "(link yok)"]
         return "\n".join(lines)
     by={}
     for x in matches:
-        name=x.advisor if is_valid_advisor(x.advisor) else "Danışman belirtilmemiş"; by[name]=by.get(name,0)+1
+        name=advisor_display_name(x.advisor); by[name]=by.get(name,0)+1
     return "\n".join([f"{len(matches)} uygun ilan bulundu:"]+[f"{k}: {v} ilan" for k,v in sorted(by.items(),key=lambda kv:(-kv[1],norm(kv[0])))]+["","Linkleri görmek için aynı komuta link ekleyin."])

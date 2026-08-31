@@ -27,3 +27,25 @@ def test_parse_remax_detail_reads_real_remax_labels():
     assert x.listing_date == '27.08.2026'
     assert x.phone == '0532 386 25 47'
     assert x.advisor == 'Berkan Aslan'
+
+
+def test_parse_remax_detail_prefers_labeled_advisor_over_portfolio_noise():
+    text='''İlan Detayı
+SATILIK DAİRE
+Portföy No
+P87625078
+Emlak Tipi
+Daire / Satılık
+Gayrimenkul Danışmanı
+Hatice Akpınar Davarcı
+Telefon
+0532 111 22 33
+'''
+
+    item=parse_remax_detail(
+        text=text,
+        url='https://remax.com.tr/tr/portfoy/P87625078',
+        source_url='https://remax.com.tr/tr/ofis/detay/carsi',
+    )
+
+    assert item.advisor == 'Hatice Akpınar Davarcı'

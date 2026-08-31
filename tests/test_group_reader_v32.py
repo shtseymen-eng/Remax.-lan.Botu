@@ -1,6 +1,7 @@
 from pathlib import Path
 
-BOT = Path("current_whatsapp_bot_snapshot.py").read_text(encoding="utf-8")
+ROOT = Path(__file__).resolve().parents[1]
+BOT = (ROOT / "src/remax_bot/whatsapp_bot.py").read_text(encoding="utf-8")
 
 def test_group_reader_uses_message_containers():
     assert '[data-testid="msg-container"]' in BOT

@@ -1,30 +1,30 @@
-RE/MAX İlan Botu V32.1 Core + Grup Okuma Kontrolü
+RE/MAX İlan Botu V32.2 Grup Okuma Test Fix
 
 HATA NEDENİ
-V32 paketinde src/remax_bot/core.py yanlışlıkla sadeleştirilmiş sürümle değişmiş.
-Bu nedenle source_key ve DB sınıfı kaybolmuş ve GitHub Actions test toplama aşamasında:
-ImportError: cannot import name 'source_key'
-hatası oluşmuş.
+tests/test_group_reader_v32.py yanlışlıkla:
+current_whatsapp_bot_snapshot.py
+adlı sadece yerel doğrulamada kullanılan geçici dosyayı okumaya çalışıyordu.
+
+Bu dosya GitHub reposunda olmadığı için Actions:
+FileNotFoundError: current_whatsapp_bot_snapshot.py
+hatası veriyordu.
 
 DÜZELTME
-Bu paketteki src/remax_bot/core.py tam sürümdür.
-source_key, source_label, DB, Listing, search ve kaynak bazlı ilan saklama işlevleri geri gelir.
-
-WHATSAPP GRUP OKUMA KONTROLÜ
-Mevcut V32 okuyucu:
-- [data-testid="msg-container"] ile açık konuşmadaki mesajları tarıyor.
-- data-pre-plain-text üzerinden grup mesajındaki gönderen adını okumaya çalışıyor.
-- Gelen ve sizin gönderdiğiniz # komutlarını işleyebiliyor.
-- #Max başla komutunu açık olan grup veya özel sohbetten algılamak üzere tasarlanmış.
-
-ÖNEMLİ
-Bu kontrol kod ve regresyon seviyesindedir. Canlı WhatsApp üzerinde kesin doğrulama,
-yeni APP/EXE açılıp bir grup sohbetinde #Max başla yazıldığında Max'in aynı gruba cevap
-vermesiyle yapılır.
+Test artık doğrudan gerçek uygulama dosyasını okur:
+src/remax_bot/whatsapp_bot.py
 
 GITHUB'A YÜKLEME
 Sadece:
-src/remax_bot/core.py
+tests/test_group_reader_v32.py
 dosyasını GitHub'da aynı konuma yükleyip mevcut dosyanın üzerine yazın.
 
-tests klasörünü yüklemeniz gerekmez; kontrol amaçlı pakete eklenmiştir.
+WHATSAPP GRUP OKUMA KONTROLÜ
+Mevcut V32 okuyucu:
+- [data-testid="msg-container"] ile açık konuşmanın mesajlarını tarar.
+- data-pre-plain-text içinden gönderen bilgisini almaya çalışır.
+- Gelen ve giden # komutlarını ayırabilir.
+- Tek # ile başlayan komutları kabul eder.
+
+Bu paket uygulama kodunu değiştirmez. Yalnız hatalı testi düzeltir.
+Canlı grup okuması, yeni derleme açıldıktan sonra bir WhatsApp grubunda
+#Max başla mesajına Max'in aynı grupta cevap vermesiyle kesin doğrulanır.

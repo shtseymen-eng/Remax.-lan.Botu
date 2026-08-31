@@ -5,10 +5,11 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "src/remax_bot/app.py").read_text(encoding="utf-8")
 
 
-def test_home_keeps_whatsapp_preview_separate_from_listing_table():
+def test_home_uses_visible_whatsapp_panel_for_the_bot():
     home = APP[APP.index("    def _home(self):"):APP.index("    def _listings(self):")]
     assert "WhatsApp Web" in home
-    assert "gerçek Chrome WhatsApp" in home
+    assert "Max bu paneli doğrudan kullanır" in home
+    assert "gerçek Chrome WhatsApp" not in home
     assert "QTableWidget" not in home
     assert "TARA / GÜNCELLE" not in home
 

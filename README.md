@@ -7,14 +7,14 @@ Windows ve macOS üzerinde çalışan ilan yönetimi ve WhatsApp yanıt uygulama
 - RE/MAX ÇARŞI ve RE/MAX ÇARŞI 2 portföylerini tarar.
 - Excel/CSV dosyalarından veya manuel girişten ilan ekler.
 - İlanları danışman, konum, tür ve fiyata göre filtreler.
-- Gerçek Google Chrome oturumunda WhatsApp mesajlarını okur.
+- Uygulamanın içindeki WhatsApp Web panelinden mesajları okur ve yanıtlar.
 - Ayarlardaki grup/sohbet adını otomatik bulup açar.
-- Gelen veya bot hesabından yazılan `#...` komutlarına aynı sohbette cevap verir.
+- Aynı mesajı yalnızca bir kez işler ve yanıtı gerçek Gönder düğmesiyle yollar.
 - WhatsApp ve tarayıcı profillerini bilgisayarda kalıcı olarak saklar.
 
 ## Kurulum
 
-Python 3.11 veya daha yeni bir sürüm ve Google Chrome gerekir.
+Python 3.11 veya daha yeni bir sürüm gerekir.
 
 ### macOS
 
@@ -36,18 +36,18 @@ pip install -e ".[dev]"
 python -m remax_bot.app
 ```
 
-İlk WhatsApp kullanımında açılan Chrome penceresindeki QR kodunu okutun. Oturum sonraki açılışlarda korunur.
+İlk WhatsApp kullanımında uygulamanın içindeki WhatsApp panelinde görünen QR kodunu okutun. Oturum sonraki açılışlarda korunur.
 
 ## Botu kullanma
 
-1. **Ayarlar** bölümüne WhatsApp grup/sohbet adını eksiksiz yazın ve kaydedin.
+1. Sabit bir grup isterseniz **Ayarlar** bölümüne WhatsApp grup/sohbet adını eksiksiz yazıp kaydedin; panel otomatik olarak bu gruba geçer.
 2. **BOTU BAŞLAT** düğmesine basın.
-3. Max gerçek Chrome penceresini açar ve belirtilen sohbeti bulur.
-4. Durum satırında grubun açıldığı görüldükten sonra sohbete `#Max başla` yazın.
+3. Max uygulamanın içindeki WhatsApp panelinde belirtilen sohbeti bulur.
+4. Durum satırında grubun açıldığı görüldükten sonra sohbete `#Max başla` veya `#Max başlat` yazın.
 5. `#?` ile komut yardımını veya örneğin `#izmit kiralık 3+1#` sorgusunu gönderin.
 6. `#Max durdur` ile cevap modunu kapatın.
 
-Grup adı boş bırakılırsa Max, Chrome'da elle açtığınız sohbeti dinler.
+Grup adı boş bırakılırsa Max, `#Max başla` veya `#Max başlat` komutunun görüldüğü açık sohbete kilitlenir. Ayarlarda grup adı varsa o grup önceliklidir ve diğer sohbetlerdeki komutlar yok sayılır.
 
 ## Test
 

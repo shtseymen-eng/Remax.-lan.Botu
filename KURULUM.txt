@@ -1,41 +1,17 @@
-RE/MAX İLAN BOTU v0.29 GÜNCELLEME PAKETİ
+RE/MAX İlan Botu v0.29.1 Core Fix
 
-BU SÜRÜMDE
-- WhatsApp botu artık AYRI CHROME PENCERESİ AÇMAZ.
-- Bot, programın içindeki WhatsApp Web sekmesini kullanır.
-- #bot başlat# ve #bot durdur# aktivasyon sistemi uygulama içi WhatsApp'ta çalışır.
-- Türkçe karakterler doğrudan uygulama içindeki WhatsApp sayfasına Unicode olarak gönderilir.
-- V28 fiyat komutları dahildir:
-    #55 bin#
-    #4 milyon#
-    #izmit kiralık 55 bin#
-    #izmit satılık daire 4 milyon#
-  Fiyat sınırına eşit ve altındaki ilanlar linkleriyle listelenir.
-- #danışmanlar# özelliği korunur.
-- Bot Ayarları ekranında "Bot Komut Testi" alanının ALTINA sürekli görünen "Komut Listesi" eklendi.
-- Sol alt köşeye sarı, iki ucu tırtıklı SEYMEN bandı eklendi.
-- RE/MAX ÇARŞI görseli biraz küçültüldü.
-- Masaüstü / uygulama simgesi RE/MAX ÇARŞI logosu olarak değiştirildi.
-- Windows ve macOS GitHub Actions build'lerinde yeni ikon kullanılır.
-- Selenium paketleme kaldırıldı. WhatsApp için ayrı Chrome açılmaz.
-- Sürüm: v29.0.0
+NEDEN HATA OLDU?
+V29 paketindeki src/remax_bot/core.py eksik sürümdü.
+source_key ve DB sınıfı kaybolduğu için GitHub Actions test toplama aşamasında durdu.
+Bu yüzden hem Windows hem macOS aynı hatayı verdi.
 
-GITHUB'A YÜKLEME
-ZIP'i açın.
-İçindeki klasörleri GitHub reposunun KÖK dizinine aynı yapıyla yükleyin.
-Mevcut dosyaların üzerine yazılmasına izin verin.
-Commit changes ile kaydedin.
+YAPILACAK:
+Bu paketteki src/remax_bot/core.py dosyasını GitHub'da aynı konuma yükleyip mevcut dosyanın üzerine yazın.
+Commit changes yapın.
 
-ÖNEMLİ DOSYALAR
-src/remax_bot/app.py
-src/remax_bot/importer.py
-src/remax_bot/whatsapp_bot.py
-src/remax_bot/assets/*
-tests/test_commands.py
-tests/test_whatsapp_v29.py
-.github/workflows/main.yml
-pyproject.toml
+DOĞRULAMA:
+tests/test_core.py: 5 test geçti.
+core.py py_compile: başarılı.
 
-DOĞRULAMA
-python -m py_compile ile app.py, whatsapp_bot.py ve importer.py doğrulandı.
-pytest: 19 test geçti.
+Bu paket yalnızca hatayı düzelten çekirdek dosyayı içerir.
+V29 arayüz/WhatsApp/SEYMEN/ikon değişikliklerini bozmaz.

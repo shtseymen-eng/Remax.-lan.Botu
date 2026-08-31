@@ -11,7 +11,7 @@ from PySide6.QtWebEngineCore import QWebEngineProfile,QWebEnginePage
 from .core import DB,Listing,source_label
 from .playwright_scanner import PlaywrightScanner
 from .importer import read_list_file,command_response,command_help,advisor_names,filter_listings,price_number
-from .whatsapp_selenium import SeleniumWhatsAppBot
+from .whatsapp_webengine import EmbeddedWhatsAppBot
 from . import __version__
 
 BLUE='#0B4DB8';NAVY='#062D69';RED='#E31837';GREEN='#13A84A'
@@ -213,7 +213,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         wt.setStyleSheet('font-size:18px;font-weight:900')
         wh.addWidget(wt)
         wh.addStretch()
-        info=QLabel('Bu alan önizlemedir; Max gerçek Chrome WhatsApp oturumunu kullanır.')
+        info=QLabel('Max bu paneli doğrudan kullanır; ayrı Chrome penceresi açılmaz.')
         info.setStyleSheet(f'color:{MUTED};font-size:11px')
         wh.addWidget(info)
         wal.addLayout(wh)
@@ -225,7 +225,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
 
         cmdrow=QHBoxLayout()
         self.quick_cmd=QLineEdit()
-        self.quick_cmd.setPlaceholderText('#Max başla   veya   #izmit kiralık 55 bin')
+        self.quick_cmd.setPlaceholderText('#Max başla / #Max başlat   veya   #izmit kiralık 55 bin')
         sendcmd=QPushButton('KOMUTU TEST ET')
         sendcmd.setObjectName('blue')
         sendcmd.clicked.connect(self.quick_test)
@@ -253,7 +253,10 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         l.addWidget(wa_card,1)
         self.stack.addWidget(p)
 
-        self.wabot=SeleniumWhatsAppBot(lambda text:command_response(self.db.all(),text))
+        self.wabot=EmbeddedWhatsAppBot(
+            lambda text:command_response(self.db.all(),text),
+            page=self.wa.page()
+        )
         self.wabot.status.connect(self._wa_status)
 
     def _listings(self):
@@ -427,7 +430,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
 
         f=QFormLayout()
         self.group=QLineEdit(self.settings.get('group',''))
-        self.group.setPlaceholderText('Grup/sohbet adı; boşsa Chrome\'da açık sohbet kullanılır.')
+        self.group.setPlaceholderText('Boşsa #Max başla yazılan açık sohbet kullanılır.')
         self.sound=QCheckBox('Bildirim sesi açık')
         self.sound.setChecked(self.settings.get('sound',True))
         self.days=QSpinBox()
@@ -447,7 +450,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         test=QGroupBox('Bot Komut Testi')
         tf=QVBoxLayout(test)
         self.cmdtest=QLineEdit()
-        self.cmdtest.setPlaceholderText('#Max başla / #? / #danışmanlar / #izmit kiralık 55 bin')
+        self.cmdtest.setPlaceholderText('#Max başla / #Max başlat / #? / #danışmanlar')
         self.cmdout=QPlainTextEdit()
         self.cmdout.setReadOnly(True)
         cb=QPushButton('KOMUTU TEST ET')
@@ -595,6 +598,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
             days=self.days.value()
         )
         self._save_settings()
+        self.wabot.set_group(self.settings.get('group',''))
         self.refresh()
 
     def open_link(self,row,col):

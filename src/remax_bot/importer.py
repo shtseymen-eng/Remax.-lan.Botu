@@ -84,7 +84,7 @@ def filter_listings(items,advisor="",transaction="",property_type="",location=""
 def command_help():
     return """RE/MAX ÇARŞI İLAN BOTU KOMUTLARI
 
-#Max başla
+#Max başla / #Max başlat
 Max ilan arama botunu aktif eder.
 
 #Max durdur

@@ -1,25 +1,41 @@
-RE/MAX İlan Botu v0.28 Güncelleme Paketi
+RE/MAX İLAN BOTU v0.29 GÜNCELLEME PAKETİ
 
-YENİLİKLER
-- #55 bin# -> 55.000 TL ve altındaki ilanları linkleriyle gönderir.
-- #4 milyon# -> 4.000.000 TL ve altındaki ilanları linkleriyle gönderir.
-- Bölge/tür ile birlikte de çalışır:
-  #izmit kiralık 55 bin#
-  #izmit satılık daire 4 milyon#
-- 55000, 55.000, 4000000 ve 4.000.000 biçimleri de desteklenir.
-- Fiyat sınırı yazıldığında ayrıca "link" kelimesi yazmaya gerek yoktur.
-- Sınırın üstündeki ilanı "en yakın" diye getirmez. Yalnızca fiyat sınırına eşit veya daha düşük ilanları verir.
-- Fiyat sorgularında uygun olan tüm ilanların linkleri listelenir.
-- V27'deki #danışmanlar# ve Türkçe karakter düzenlemeleri korunur.
+BU SÜRÜMDE
+- WhatsApp botu artık AYRI CHROME PENCERESİ AÇMAZ.
+- Bot, programın içindeki WhatsApp Web sekmesini kullanır.
+- #bot başlat# ve #bot durdur# aktivasyon sistemi uygulama içi WhatsApp'ta çalışır.
+- Türkçe karakterler doğrudan uygulama içindeki WhatsApp sayfasına Unicode olarak gönderilir.
+- V28 fiyat komutları dahildir:
+    #55 bin#
+    #4 milyon#
+    #izmit kiralık 55 bin#
+    #izmit satılık daire 4 milyon#
+  Fiyat sınırına eşit ve altındaki ilanlar linkleriyle listelenir.
+- #danışmanlar# özelliği korunur.
+- Bot Ayarları ekranında "Bot Komut Testi" alanının ALTINA sürekli görünen "Komut Listesi" eklendi.
+- Sol alt köşeye sarı, iki ucu tırtıklı SEYMEN bandı eklendi.
+- RE/MAX ÇARŞI görseli biraz küçültüldü.
+- Masaüstü / uygulama simgesi RE/MAX ÇARŞI logosu olarak değiştirildi.
+- Windows ve macOS GitHub Actions build'lerinde yeni ikon kullanılır.
+- Selenium paketleme kaldırıldı. WhatsApp için ayrı Chrome açılmaz.
+- Sürüm: v29.0.0
 
-KURULUM
-ZIP içindeki dosyaları GitHub reposunun köküne aynı klasör yapısıyla yükleyin.
-Mevcut dosyaların üzerine yazın ve Commit changes ile kaydedin.
+GITHUB'A YÜKLEME
+ZIP'i açın.
+İçindeki klasörleri GitHub reposunun KÖK dizinine aynı yapıyla yükleyin.
+Mevcut dosyaların üzerine yazılmasına izin verin.
+Commit changes ile kaydedin.
 
-Değişen dosyalar:
+ÖNEMLİ DOSYALAR
+src/remax_bot/app.py
 src/remax_bot/importer.py
+src/remax_bot/whatsapp_bot.py
+src/remax_bot/assets/*
 tests/test_commands.py
+tests/test_whatsapp_v29.py
+.github/workflows/main.yml
 pyproject.toml
 
-Doğrulama:
-13 otomatik test başarıyla geçti.
+DOĞRULAMA
+python -m py_compile ile app.py, whatsapp_bot.py ve importer.py doğrulandı.
+pytest: 19 test geçti.

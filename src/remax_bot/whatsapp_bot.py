@@ -4,54 +4,100 @@ from PySide6.QtCore import QObject,QTimer,Signal
 from .whatsapp_logic import command_key
 from .whatsapp_state import ActivationGate
 
-# WhatsApp'ın çalışan eski Selenium uygulamasında güvenilir olan ana mesaj
-# seçicisi msg-container idi. Gömülü QWebEngine okuyucu da aynı yapıyı esas alır.
 POLL_JS=r"""(() => {
  const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
 
- const msgContainers=Array.from(document.querySelectorAll('[data-testid="msg-container"]'));
- const inputBox=
-   document.querySelector('footer div[contenteditable="true"][role="textbox"]') ||
-   document.querySelector('footer [contenteditable="true"]') ||
-   document.querySelector('[contenteditable="true"][role="textbox"]') ||
-   document.querySelector('[contenteditable="true"][data-tab]');
+ const main=document.querySelector('#main');
+ const root=main || document.body;
 
- // Sohbet açık olduğunu yalnız #main veya footer'a bağlamıyoruz.
- // Mesaj kutusu veya gerçek WhatsApp mesaj kapsayıcısı varsa açık sohbet vardır.
- const isOpen=msgContainers.length>0 || !!inputBox;
+ // WhatsApp sık sık test-id ve composer DOM'unu değiştiriyor.
+ // Açık sohbeti tek bir seçiciyle değil, birkaç bağımsız işaretle doğrula.
+ const msgContainers=Array.from(document.querySelectorAll('[data-testid="msg-container"]'));
+ const bubbleRows=Array.from(document.querySelectorAll('.message-in,.message-out,[class*="message-in"],[class*="message-out"]'));
+ const metaRows=Array.from(document.querySelectorAll('[data-pre-plain-text]'));
+ const dataRows=Array.from(root.querySelectorAll('[data-id]'));
+
+ const inputBox=
+   root.querySelector('footer div[contenteditable="true"][role="textbox"]') ||
+   root.querySelector('footer [contenteditable="true"]') ||
+   root.querySelector('div[contenteditable="true"][role="textbox"]') ||
+   root.querySelector('[contenteditable="true"][data-lexical-editor="true"]') ||
+   root.querySelector('[contenteditable="true"][aria-placeholder*="mesaj"]') ||
+   root.querySelector('[contenteditable="true"][aria-placeholder*="Mesaj"]') ||
+   root.querySelector('[contenteditable="true"][aria-placeholder*="message"]') ||
+   root.querySelector('[contenteditable="true"][aria-placeholder*="Message"]') ||
+   root.querySelector('[contenteditable="true"][data-tab]');
+
+ const header=
+   (main && main.querySelector('header')) ||
+   document.querySelector('[data-testid="conversation-info-header"]') ||
+   document.querySelector('[data-testid="conversation-info-header-chat-title"]');
+
+ const isOpen=
+   msgContainers.length>0 ||
+   bubbleRows.length>0 ||
+   metaRows.length>0 ||
+   (!!main && (!!inputBox || !!header));
+
  if(!isOpen){
-   return {isOpen:false,messages:[],reason:'no-message-container-or-input'};
+   return {
+     isOpen:false,
+     messages:[],
+     reason:'no-open-chat-markers',
+     diagnostics:{
+       main:!!main,
+       composer:!!inputBox,
+       header:!!header,
+       msgContainers:msgContainers.length,
+       bubbleRows:bubbleRows.length,
+       metaRows:metaRows.length,
+       dataRows:dataRows.length
+     }
+   };
  }
 
- let conversationRoot=document.querySelector('#main') || document.body;
- const rows=msgContainers.length
-   ? msgContainers
-   : [
-       ...Array.from(conversationRoot.querySelectorAll('.message-in,.message-out')),
-       ...Array.from(conversationRoot.querySelectorAll('[data-id]')),
-       ...Array.from(conversationRoot.querySelectorAll('[data-pre-plain-text]'))
-     ];
+ const rows=[...new Set([
+   ...msgContainers,
+   ...bubbleRows,
+   ...metaRows,
+   ...dataRows
+ ])];
 
  const messages=[];
  const seenRows=new Set();
 
- for(const el of rows.slice(-240)){
-   const row=el.closest?.('.message-in,.message-out,[data-id]') || el;
+ for(const el of rows.slice(-300)){
+   const row=
+     el.closest?.('.message-in,.message-out,[class*="message-in"],[class*="message-out"],[data-id]') ||
+     el;
+
    if(!row || seenRows.has(row)) continue;
    seenRows.add(row);
 
-   const outNode=el.closest?.('[class*="message-out"]') || row.closest?.('[class*="message-out"]');
-   const inNode=el.closest?.('[class*="message-in"]') || row.closest?.('[class*="message-in"]');
+   const outNode=
+     el.closest?.('.message-out,[class*="message-out"]') ||
+     row.closest?.('.message-out,[class*="message-out"]');
+
+   const inNode=
+     el.closest?.('.message-in,[class*="message-in"]') ||
+     row.closest?.('.message-in,[class*="message-in"]');
+
    const direction=outNode ? 'out' : (inNode ? 'in' : 'in');
 
-   const meta=el.querySelector?.('[data-pre-plain-text]') ||
-              row.querySelector?.('[data-pre-plain-text]');
+   const meta=
+     (el.matches?.('[data-pre-plain-text]') ? el : null) ||
+     el.querySelector?.('[data-pre-plain-text]') ||
+     row.querySelector?.('[data-pre-plain-text]');
+
    const pre=meta?.getAttribute('data-pre-plain-text') || '';
 
-   const copyable=el.querySelector?.('[class*="copyable-text"]') ||
-                  row.querySelector?.('[class*="copyable-text"]');
-   const selectable=el.querySelector?.('span.selectable-text') ||
-                    row.querySelector?.('span.selectable-text');
+   const copyable=
+     el.querySelector?.('[class*="copyable-text"]') ||
+     row.querySelector?.('[class*="copyable-text"]');
+
+   const selectable=
+     el.querySelector?.('span.selectable-text') ||
+     row.querySelector?.('span.selectable-text');
 
    let fullText=clean(
        selectable?.innerText ||
@@ -61,16 +107,19 @@ POLL_JS=r"""(() => {
        row.innerText ||
        ''
    );
+
    if(!fullText) continue;
 
-   // Eski #komut# biçimi ve yeni tek # biçimi birlikte desteklenir.
    let commands=fullText.match(/#[^#\n]+#/g) || [];
    if(!commands.length && fullText.startsWith('#')) commands=[fullText];
    if(!commands.length) continue;
 
    let sender='',stamp='';
    const m=pre.match(/^\[([^\]]+)\]\s*([^:]+):/);
-   if(m){stamp=clean(m[1]);sender=clean(m[2]);}
+   if(m){
+     stamp=clean(m[1]);
+     sender=clean(m[2]);
+   }
    if(!sender) sender=direction==='out' ? 'Siz' : 'Kullanıcı';
 
    let dataNode=row;
@@ -89,21 +138,46 @@ POLL_JS=r"""(() => {
    }));
  }
 
- return {isOpen:true,messages,count:messages.length};
+ return {
+   isOpen:true,
+   messages,
+   count:messages.length,
+   diagnostics:{
+     main:!!main,
+     composer:!!inputBox,
+     header:!!header,
+     msgContainers:msgContainers.length,
+     bubbleRows:bubbleRows.length,
+     metaRows:metaRows.length,
+     dataRows:dataRows.length
+   }
+ };
 })()"""
 
 SEND_JS=r"""((message)=>{
-  const root=document.querySelector('#main') || document.body;
+  const main=document.querySelector('#main');
+  const root=main || document.body;
+
   const box=
     root.querySelector('footer div[contenteditable="true"][role="textbox"]') ||
     root.querySelector('footer [contenteditable="true"]') ||
-    document.querySelector('[contenteditable="true"][role="textbox"]') ||
-    document.querySelector('[contenteditable="true"][data-tab]');
+    root.querySelector('div[contenteditable="true"][role="textbox"]') ||
+    root.querySelector('[contenteditable="true"][data-lexical-editor="true"]') ||
+    root.querySelector('[contenteditable="true"][aria-placeholder*="mesaj"]') ||
+    root.querySelector('[contenteditable="true"][aria-placeholder*="Mesaj"]') ||
+    root.querySelector('[contenteditable="true"][aria-placeholder*="message"]') ||
+    root.querySelector('[contenteditable="true"][aria-placeholder*="Message"]') ||
+    root.querySelector('[contenteditable="true"][data-tab]');
+
   if(!box) return {ok:false,error:'WhatsApp mesaj kutusu bulunamadı'};
 
   box.focus();
-  document.execCommand('selectAll',false,null);
-  document.execCommand('insertText',false,String(message));
+
+  try{
+    document.execCommand('selectAll',false,null);
+    document.execCommand('insertText',false,String(message));
+  }catch(e){}
+
   box.dispatchEvent(new InputEvent('input',{
       bubbles:true,
       inputType:'insertText',
@@ -182,9 +256,16 @@ class WhatsAppBot(QObject):
     def _polled(self,result):
         if not self.running:
             return
+
         result=result or {}
         if not result.get('isOpen'):
-            self._status('WhatsApp açık sohbeti bulunamadı')
+            d=result.get('diagnostics') or {}
+            self._status(
+                'WhatsApp açık sohbeti bulunamadı '
+                f"(main:{int(bool(d.get('main')))} "
+                f"mesaj:{d.get('msgContainers',0)}/{d.get('bubbleRows',0)}/{d.get('metaRows',0)} "
+                f"kutu:{int(bool(d.get('composer')))})"
+            )
             return
 
         if self.gate.active:
@@ -200,6 +281,7 @@ class WhatsAppBot(QObject):
 
             if not text or key in self.seen:
                 continue
+
             self.seen.add(key)
             if len(self.seen)>800:
                 self.seen=set(list(self.seen)[-400:])

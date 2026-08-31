@@ -1,23 +1,38 @@
-RE/MAX İlan Botu V32.4 CI Compatibility Fix
+RE/MAX İlan Botu V32.5 - WhatsApp Açık Sohbet Fix
 
-Bu paket gerçek GitHub Actions job 99444688158 içindeki 4 hatalı eski testi güncel Max mimarisine uyarlar.
+EKRANDAKİ HATANIN KÖK NEDENİ
+WhatsApp sohbeti görünür ve açık olmasına rağmen eski okuyucu açık sohbeti yalnız:
+1) [data-testid="msg-container"]
+2) dar kapsamlı contenteditable mesaj kutusu seçicileri
+ile doğruluyordu.
 
-DÜZELTİLEN TESTLER
-- tests/test_whatsapp_bot.py
-  Tek # komutları artık geçerlidir. Bu nedenle #eksik de komut adayıdır.
+WhatsApp Web bu DOM alanlarını değiştirdiğinde ekranda mesajlar görünse bile
+okuyucu daha geniş yedek taramaya geçmeden:
+'WhatsApp açık sohbeti bulunamadı'
+diyordu.
 
-- tests/test_whatsapp_selenium_state.py
-  Eski #bot başlat# / #bot durdur# beklentileri kaldırıldı.
-  Güncel aktivasyon: #Max başla
-  Güncel durdurma: #Max durdur
+V32.5 DEĞİŞİKLİĞİ
+- Açık sohbet artık birden fazla işaretle doğrulanır:
+  * msg-container
+  * .message-in / .message-out
+  * data-pre-plain-text
+  * #main + sohbet başlığı / mesaj kutusu
+- Yedek mesaj satırları açık sohbet kararından ÖNCE toplanır.
+- Yeni contenteditable / lexical editor tipleri desteklenir.
+- Mesaj gönderme tarafı da aynı geniş composer seçicilerini kullanır.
+- Açık sohbet yine bulunamazsa durum satırında tanı bilgisi gösterilir:
+  main, mesaj seçici sayıları ve mesaj kutusu durumu.
 
-- tests/test_whatsapp_v24.py
-  Eski durum metni beklentisi güncel Max durum metnine çevrildi.
+KULLANIM
+1. GitHub'da src/remax_bot/whatsapp_bot.py dosyasını bu paketteki dosyayla değiştirin.
+2. tests/test_whatsapp_open_chat_v325.py dosyasını tests klasörüne ekleyin.
+3. Commit changes yapın.
+4. Actions Windows EXE ve macOS APP'i yeniden oluşturacaktır.
+5. Yeni APP açıldığında WhatsApp'ta bir grup veya özel sohbet açın.
+6. BOTU BAŞLAT'a basın.
+7. Sohbete #Max başla yazın.
+8. Max aynı sohbette kendini tanıtmalıdır.
 
-UYGULAMA KODUNA DOKUNULMADI
-Mevcut src/remax_bot/whatsapp_state.py zaten #Max başla akışını kullanıyor.
-Mevcut src/remax_bot/whatsapp_bot.py açık sohbet + msg-container okuyucusunu kullanıyor.
-
-GITHUB'A YÜKLEME
-ZIP içindeki üç test dosyasını aynı paths ile GitHub'a yükleyip mevcut dosyaların üzerine yazın.
-Commit changes sonrası Actions yeniden çalışacaktır.
+CANLI DOĞRULAMA
+Otomatik testler DOM kapısının artık eski iki seçiciye bağımlı olmadığını doğrular.
+Gerçek WhatsApp Web ile son doğrulama yeni APP/EXE üzerinde yapılır.

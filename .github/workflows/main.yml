@@ -44,16 +44,9 @@ jobs:
             --clean `
             --windowed `
             --name "REMAX_Ilan_Botu" `
+            --icon "src/remax_bot/assets/app_icon.ico" `
             --collect-all playwright `
-            --collect-all selenium `
             --collect-data remax_bot `
-            --hidden-import selenium `
-            --hidden-import selenium.webdriver `
-            --hidden-import selenium.webdriver.chrome `
-            --hidden-import selenium.webdriver.chrome.service `
-            --hidden-import selenium.webdriver.common.by `
-            --hidden-import selenium.webdriver.support.ui `
-            --hidden-import selenium.webdriver.support.expected_conditions `
             launcher.py
 
       - name: Windows paketini yukle
@@ -96,17 +89,10 @@ jobs:
             --clean \
             --windowed \
             --name "REMAX_Ilan_Botu" \
-            --collect-all selenium \
+            --icon "src/remax_bot/assets/app_icon.icns" \
             --collect-data remax_bot \
             --hidden-import playwright \
             --hidden-import playwright.sync_api \
-            --hidden-import selenium \
-            --hidden-import selenium.webdriver \
-            --hidden-import selenium.webdriver.chrome \
-            --hidden-import selenium.webdriver.chrome.service \
-            --hidden-import selenium.webdriver.common.by \
-            --hidden-import selenium.webdriver.support.ui \
-            --hidden-import selenium.webdriver.support.expected_conditions \
             launcher.py
 
       - name: APP dosyasini ZIP yap

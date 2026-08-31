@@ -73,6 +73,7 @@ class Main(QMainWindow):
         self.wa_profile.setCachePath(str(d/'whatsapp-cache'))
         self.wa_profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
         self.wa_profile.setHttpAcceptLanguage('tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7')
+        self.wa_profile.setHttpUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36')
 
         self._build()
         self._style()

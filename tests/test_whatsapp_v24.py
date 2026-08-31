@@ -22,7 +22,10 @@ def test_poll_does_not_search_or_match_group_name():
 
 def test_bot_listens_to_current_open_chat_only():
     assert "document.querySelector('#main')" in BOT
-    assert "Dinleniyor: açık WhatsApp sohbeti" in BOT
+    assert (
+        "Dinleniyor: açık WhatsApp sohbeti" in BOT
+        or "Dinleniyor: uygulama içi WhatsApp açık sohbeti" in BOT
+    )
 
 
 def test_old_open_chat_reader_removed():

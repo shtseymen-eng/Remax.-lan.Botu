@@ -1,17 +1,16 @@
-RE/MAX İlan Botu v0.29.1 Core Fix
+RE/MAX İlan Botu v0.29.2 CI Fix
 
-NEDEN HATA OLDU?
-V29 paketindeki src/remax_bot/core.py eksik sürümdü.
-source_key ve DB sınıfı kaybolduğu için GitHub Actions test toplama aşamasında durdu.
-Bu yüzden hem Windows hem macOS aynı hatayı verdi.
+Bu paket, son GitHub Actions çalışmasındaki kalan 2 test hatasını düzeltir.
 
-YAPILACAK:
-Bu paketteki src/remax_bot/core.py dosyasını GitHub'da aynı konuma yükleyip mevcut dosyanın üzerine yazın.
-Commit changes yapın.
+1) tests/test_whatsapp_v24.py
+Eski V24 testi yalnızca eski durum metnini bekliyordu.
+V29'da doğru yeni metin olan "Dinleniyor: uygulama içi WhatsApp açık sohbeti" de kabul ediliyor.
 
-DOĞRULAMA:
-tests/test_core.py: 5 test geçti.
-core.py py_compile: başarılı.
+2) .github/workflows/main.yml
+V29 testinin beklediği RE/MAX uygulama ikonları build komutuna eklendi:
+Windows: app_icon.ico
+macOS: app_icon.icns
 
-Bu paket yalnızca hatayı düzelten çekirdek dosyayı içerir.
-V29 arayüz/WhatsApp/SEYMEN/ikon değişikliklerini bozmaz.
+Ayrıca artık kullanılmayan Selenium paketleme satırları kaldırıldı.
+
+ZIP'i repo köküne yükleyin, mevcut iki dosyanın üzerine yazın ve Commit changes yapın.

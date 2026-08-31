@@ -2,6 +2,9 @@ name: Build REMAX Ilan Botu
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   windows-build:

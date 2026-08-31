@@ -2,9 +2,6 @@ name: Build REMAX Ilan Botu
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
 
 jobs:
   windows-build:
@@ -46,8 +43,6 @@ jobs:
             --name "REMAX_Ilan_Botu" `
             --icon "src/remax_bot/assets/app_icon.ico" `
             --collect-all playwright `
-            --collect-all selenium `
-            --hidden-import selenium `
             --collect-data remax_bot `
             launcher.py
 
@@ -94,8 +89,6 @@ jobs:
             --icon "src/remax_bot/assets/app_icon.icns" \
             --collect-data remax_bot \
             --collect-all playwright \
-            --collect-all selenium \
-            --hidden-import selenium \
             --hidden-import playwright \
             --hidden-import playwright.sync_api \
             launcher.py

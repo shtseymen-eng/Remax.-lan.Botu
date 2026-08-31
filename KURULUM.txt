@@ -1,0 +1,34 @@
+REMAX İlan Botu v0.27 Güncelleme Paketi
+
+Bu ZIP mevcut GitHub projesinin üzerine uygulanacak güncelleme dosyalarını içerir.
+
+DEĞİŞEN DOSYALAR
+1) src/remax_bot/importer.py
+   - #danışmanlar# komutu eklendi.
+   - Danışman bazında ilan sayısı, toplam ilan ve toplam danışman sayısı verir.
+   - #? yardım listesi güncellendi.
+   - Türkçe karakterli danışman adları korunur.
+
+2) src/remax_bot/selenium_whatsapp.py
+   - WhatsApp mesaj gönderiminde Unicode/Türkçe karakter desteği güçlendirildi.
+   - ç Ç ğ Ğ ı İ ö Ö ş Ş ü Ü karakterleri DOM üzerinden doğrudan yazılır.
+   - Clipboard UTF-8 yedek yöntemi düzeltildi.
+
+3) tests/test_commands.py
+   - #danışmanlar# ve Türkçe karakter testleri eklendi.
+
+UYGULAMA
+ZIP'i açın ve içindeki src ve tests klasörlerini mevcut repo köküne kopyalayın.
+Sorulduğunda mevcut dosyaların üzerine yazın.
+Ardından GitHub'a commit edin. GitHub Actions yeni Windows EXE ve macOS APP paketlerini oluşturacaktır.
+
+Örnek:
+#danışmanlar#
+
+DANIŞMAN İLAN DAĞILIMI
+
+Ayşe Şen: 2 ilan
+Mert Öztürk: 1 ilan
+
+Toplam ilan: 3
+Toplam danışman: 2

@@ -51,13 +51,47 @@ def read_list_file(path):
 def price_number(s):
     digits=re.sub(r"[^0-9]","",str(s or "")); return int(digits) if digits else None
 def command_help():
-    return "RE/MAX ÇARŞI İLAN BOTU KOMUTLARI\n\n#bot başlat#\nWhatsApp ilan sorgu modunu aktif eder.\n\n#bot durdur#\nWhatsApp ilan sorgu modunu durdurur.\n\n#?\nKomut listesini gösterir.\n\n#yahya kaptan kiralık 3+1#\nUygun ilanları danışman bazında sayar.\n\n#yahya kaptan kiralık 3+1 link#\nUygun ilanların linklerini danışman adıyla gönderir.\n\n#izmit satılık daire 2+1#\nBölge + satış tipi + emlak türü + oda ile arar.\n\n#izmit kiralık 50000#\n50.000 TL ve altındaki uygun ilanları önceliklendirir; yoksa en yakın fiyatı getirir.\n\n#danışman ayşe#\nDanışman adına göre ilanları bulur.\n\nBot yalnızca başı ve sonu # olan komutları işler. Normal grup konuşmalarına cevap vermez."
+    return """RE/MAX ÇARŞI İLAN BOTU KOMUTLARI
+
+#bot başlat#
+WhatsApp ilan sorgu modunu aktif eder.
+
+#bot durdur#
+WhatsApp ilan sorgu modunu durdurur.
+
+#?
+Komut listesini gösterir.
+
+#danışmanlar#
+Tüm danışmanları mevcut ilan adetleriyle listeler.
+
+#yahya kaptan kiralık 3+1#
+Uygun ilanları danışman bazında sayar.
+
+#yahya kaptan kiralık 3+1 link#
+Uygun ilanların linklerini danışman adıyla gönderir.
+
+#izmit satılık daire 2+1#
+Bölge + satış tipi + emlak türü + oda ile arar.
+
+#izmit kiralık 50000#
+50.000 TL ve altındaki uygun ilanları önceliklendirir; yoksa en yakın fiyatı getirir.
+
+#danışman ayşe#
+Danışman adına göre ilanları bulur.
+
+Bot yalnızca başı ve sonu # olan komutları işler. Normal grup konuşmalarına cevap vermez."""
 def parse_command(text):
     t=(text or "").strip()
     if t=="#?": return {"type":"help"}
     if len(t)<3 or not (t.startswith("#") and t.endswith("#")): return {"type":"ignore"}
-    body=t[1:-1].strip(); link=bool(re.search(r"\blink\b",norm(body))); body=re.sub(r"(?i)\blink\b"," ",body).strip()
+    body=t[1:-1].strip()
+    if norm(body)=="danismanlar":
+        return {"type":"advisors"}
+    link=bool(re.search(r"\blink\b",norm(body))); body=re.sub(r"(?i)\blink\b"," ",body).strip()
     m=re.match(r"(?i)danışman\s+(.+)$",body)
+    if not m:
+        m=re.match(r"(?i)danisman\s+(.+)$",norm(body))
     if m:return {"type":"search","query":m.group(1).strip(),"links":link,"advisor_only":True}
     nums=re.findall(r"(?<![+\d])(\d{4,9})(?![+\d])",body); target=int(nums[-1]) if nums else None
     if target: body=re.sub(r"(?<![+\d])"+re.escape(nums[-1])+r"(?![+\d])"," ",body).strip()
@@ -67,6 +101,19 @@ def command_response(items,text,limit=12):
     cmd=parse_command(text)
     if cmd["type"]=="ignore":return None
     if cmd["type"]=="help":return command_help()
+    if cmd["type"]=="advisors":
+        by={}
+        unspecified="Danışman belirtilmemiş"
+        for x in items:
+            name=(x.advisor or "").strip() or unspecified
+            by[name]=by.get(name,0)+1
+        if not by:
+            return "İlan havuzunda danışman bilgisi bulunamadı."
+        named_count=sum(1 for k in by if k != unspecified)
+        lines=["DANIŞMAN İLAN DAĞILIMI",""]
+        lines += [f"{k}: {v} ilan" for k,v in sorted(by.items(),key=lambda kv:(-kv[1],norm(kv[0])))]
+        lines += ["",f"Toplam ilan: {len(items)}",f"Toplam danışman: {named_count}"]
+        return "\n".join(lines)
     matches=search(items,cmd.get("query","")); target=cmd.get("target_price")
     if target:
         priced=[(price_number(x.price),x) for x in matches]; priced=[p for p in priced if p[0] is not None]; under=[p for p in priced if p[0]<=target]

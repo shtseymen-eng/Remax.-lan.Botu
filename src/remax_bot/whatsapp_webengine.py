@@ -29,15 +29,16 @@ except ImportError:
     class QTimer:
         def __init__(self, *_args, **_kwargs):
             self.timeout = _DummySignal()
+            self.running = False
 
         def setInterval(self, _milliseconds):
             pass
 
         def start(self):
-            pass
+            self.running = True
 
         def stop(self):
-            pass
+            self.running = False
 
         @staticmethod
         def singleShot(_milliseconds, callback):
@@ -53,10 +54,6 @@ MAX_STOPPED = (
     "Max: İlan arama botu durduruldu. "
     "Yeniden başlatmak için #Max başla yazabilirsiniz."
 )
-
-
-def _normalized(value: str) -> str:
-    return " ".join(str(value or "").split()).casefold()
 
 
 def classify_command(text: str) -> str:
@@ -77,26 +74,19 @@ def classify_command(text: str) -> str:
 class RouteResult:
     replies: list[str] = field(default_factory=list)
     status: str = ""
-    open_group: str = ""
 
 
 class MessageRouter:
-    """Routes stable WhatsApp message snapshots without touching the browser."""
+    """Routes commands from whichever WhatsApp conversation is currently open."""
 
     def __init__(self, response_fn: Callable[[str], str]):
         self.response_fn = response_fn
-        self.configured_group = ""
-        self.locked_chat_id = ""
-        self.locked_chat_title = ""
         self.active = False
         self.seen = set()
         self._seen_order = deque()
         self.primed_chats = set()
 
-    def set_group(self, group: str):
-        self.configured_group = " ".join(str(group or "").split())
-        self.locked_chat_id = ""
-        self.locked_chat_title = ""
+    def reset(self):
         self.active = False
         self.seen.clear()
         self._seen_order.clear()
@@ -107,7 +97,7 @@ class MessageRouter:
             return
         self.seen.add(message_id)
         self._seen_order.append(message_id)
-        while len(self._seen_order) > 2000:
+        while len(self._seen_order) > 2500:
             old = self._seen_order.popleft()
             self.seen.discard(old)
 
@@ -118,37 +108,36 @@ class MessageRouter:
 
         chat = snapshot.get("chat") or {}
         title = " ".join(str(chat.get("title") or "").split())
-        chat_id = str(chat.get("id") or "").strip() or _normalized(title)
+        chat_id = str(chat.get("id") or "").strip() or title.casefold()
         if not title or not chat_id:
             return result
 
-        target = self.configured_group or self.locked_chat_title
-        if target and _normalized(title) != _normalized(target):
-            result.open_group = target
-            return result
-
         messages = snapshot.get("messages") or []
+
+        # First sight of a chat only records history. This stops an old #Max command
+        # from reactivating Max when the user changes conversations.
         if chat_id not in self.primed_chats:
             for message in messages:
                 self._remember(str((message or {}).get("id") or "").strip())
             self.primed_chats.add(chat_id)
-            result.status = f"{title} hazır - yeni #Max başla komutu bekleniyor"
+            result.status = f"Max dinleyici hazır - {title} içinde #Max başla yazın"
             return result
 
         for message in messages:
             if not isinstance(message, dict):
                 continue
+
             message_id = str(message.get("id") or "").strip()
             text = str(message.get("text") or "").strip()
+
             if not message_id or message_id in self.seen:
                 continue
+
             self._remember(message_id)
 
             action = classify_command(text)
+
             if action == "start":
-                if not self.configured_group and not self.locked_chat_id:
-                    self.locked_chat_id = chat_id
-                    self.locked_chat_title = title
                 self.active = True
                 result.replies.append(MAX_INTRO)
                 result.status = f"Max aktif - {title} dinleniyor"
@@ -158,7 +147,7 @@ class MessageRouter:
                 if self.active:
                     result.replies.append(MAX_STOPPED)
                 self.active = False
-                result.status = f"{title} hazır - #Max başla bekleniyor"
+                result.status = f"Max dinleyici hazır - {title} içinde #Max başla yazın"
                 continue
 
             if action != "query" or not self.active:
@@ -167,13 +156,15 @@ class MessageRouter:
             answer = self.response_fn(text)
             if answer:
                 answer = str(answer).strip()
-                result.replies.append(answer if answer.startswith("Max:") else "Max: " + answer)
+                result.replies.append(
+                    answer if answer.startswith("Max:") else "Max: " + answer
+                )
 
         return result
 
 
 class EmbeddedWhatsAppBot(QObject):
-    """Controls the WhatsApp Web page already displayed inside the application."""
+    """Reads and writes the WhatsApp Web page already visible in the app."""
 
     status = Signal(str)
     log = Signal(str)
@@ -183,88 +174,78 @@ class EmbeddedWhatsAppBot(QObject):
     (() => {
       const root=document.querySelector('#main');
       if(!root) return null;
+
       const clean=value=>String(value || '').replace(/\s+/g,' ').trim();
+
       const header=root.querySelector('header');
-      const titleNode=header?.querySelector('span[title]') || header?.querySelector('[title]') || header?.querySelector('span[dir="auto"]');
-      const title=clean(titleNode?.getAttribute?.('title') || titleNode?.innerText || titleNode?.textContent);
+      const titleNode=
+        header?.querySelector('span[title]') ||
+        header?.querySelector('[title]') ||
+        header?.querySelector('span[dir="auto"]');
+
+      const title=clean(
+        titleNode?.getAttribute?.('title') ||
+        titleNode?.innerText ||
+        titleNode?.textContent
+      );
       if(!title) return null;
+
       const candidates=[
         ...root.querySelectorAll('[data-testid="msg-container"]'),
-        ...root.querySelectorAll('.message-in,.message-out')
+        ...root.querySelectorAll('.message-in,.message-out'),
+        ...root.querySelectorAll('[data-pre-plain-text]')
       ];
+
       const rows=[];
       const seenRows=new Set();
-      for(const candidate of candidates.slice(-250)){
-        const row=candidate.closest?.('[data-testid="msg-container"],.message-in,.message-out') || candidate;
+
+      for(const candidate of candidates.slice(-300)){
+        const row=
+          candidate.closest?.('[data-testid="msg-container"],.message-in,.message-out,[data-id]') ||
+          candidate;
+
         if(!row || seenRows.has(row)) continue;
         seenRows.add(row);
-        const dataNode=(row.matches?.('[data-id]') ? row : null) || row.querySelector?.('[data-id]') || row.closest?.('[data-id]');
-        const meta=(row.matches?.('[data-pre-plain-text]') ? row : null) || row.querySelector?.('[data-pre-plain-text]');
+
+        let dataNode=row;
+        while(dataNode && !dataNode.getAttribute?.('data-id')){
+          dataNode=dataNode.parentElement;
+        }
+
+        const meta=
+          (candidate.matches?.('[data-pre-plain-text]') ? candidate : null) ||
+          row.querySelector?.('[data-pre-plain-text]');
+
         const textNode=
           row.querySelector?.('[data-testid="msg-text"]') ||
           row.querySelector?.('span.selectable-text.copyable-text') ||
           row.querySelector?.('span[class*="selectable-text"]') ||
           row.querySelector?.('[class*="copyable-text"] span[dir]');
-        const text=clean(textNode?.innerText || meta?.innerText || '');
+
+        const text=clean(
+          textNode?.innerText ||
+          meta?.innerText ||
+          row.innerText ||
+          ''
+        );
+
         if(!text || !text.startsWith('#')) continue;
+
         const pre=meta?.getAttribute?.('data-pre-plain-text') || '';
         const dataId=dataNode?.getAttribute?.('data-id') || '';
         const id=dataId || `${pre}::${text}`;
+
         if(!id) continue;
         rows.push({id,text});
       }
-      return {chat:{id:clean(title).toLocaleLowerCase('tr-TR'),title},messages:rows.slice(-100)};
-    })()
-    """
 
-    SEARCH_GROUP_JS = r"""
-    (() => {
-      const wanted=__GROUP_JSON__;
-      const visible=el=>!!el && (el.offsetParent!==null || el.getClientRects().length>0);
-      const selectors=[
-        '[data-testid="chat-list-search"]',
-        '#side div[contenteditable="true"][role="textbox"]',
-        '#side [contenteditable="true"][data-tab]',
-        'div[contenteditable="true"][aria-label*="Sohbet"]',
-        'div[contenteditable="true"][aria-label*="sohbet"]',
-        'div[contenteditable="true"][aria-label*="Search"]',
-        'div[contenteditable="true"][aria-label*="search"]'
-      ];
-      let box=null;
-      for(const selector of selectors){
-        box=Array.from(document.querySelectorAll(selector)).find(visible);
-        if(box) break;
-      }
-      if(!box) return false;
-      box.focus();
-      const selection=window.getSelection();
-      const range=document.createRange();
-      range.selectNodeContents(box);
-      selection.removeAllRanges();
-      selection.addRange(range);
-      document.execCommand('insertText',false,wanted);
-      box.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:wanted}));
-      return true;
-    })()
-    """
-
-    OPEN_GROUP_JS = r"""
-    (() => {
-      const wanted=__GROUP_JSON__;
-      const normalized=value=>String(value || '').replace(/\s+/g,' ').trim().toLocaleLowerCase('tr-TR');
-      const target=normalized(wanted);
-      const side=document.querySelector('#pane-side') || document.querySelector('#side');
-      if(!side) return false;
-      const nodes=Array.from(side.querySelectorAll('[title],span[dir="auto"],span[dir="ltr"],[role="gridcell"] span'));
-      for(const node of nodes){
-        const label=normalized(node.getAttribute?.('title') || node.innerText || node.textContent);
-        if(label!==target) continue;
-        const row=node.closest('[data-testid="cell-frame-container"],[role="listitem"],[role="row"]') || node;
-        row.scrollIntoView({block:'center'});
-        row.click();
-        return true;
-      }
-      return false;
+      return {
+        chat:{
+          id:clean(title).toLocaleLowerCase('tr-TR'),
+          title
+        },
+        messages:rows.slice(-120)
+      };
     })()
     """
 
@@ -273,27 +254,60 @@ class EmbeddedWhatsAppBot(QObject):
       const message=__MESSAGE_JSON__;
       const root=document.querySelector('#main');
       if(!root) return false;
+
       const visible=el=>!!el && (el.offsetParent!==null || el.getClientRects().length>0);
+
       const selectors=[
         'footer div[contenteditable="true"][role="textbox"]',
-        'footer div[contenteditable="true"]',
-        '[contenteditable="true"][data-lexical-editor="true"]'
+        'footer div[contenteditable="true"][data-lexical-editor="true"]',
+        'footer div[contenteditable="true"]'
       ];
+
       let box=null;
       for(const selector of selectors){
-        box=Array.from(root.querySelectorAll(selector)).find(visible);
-        if(box) break;
+        const matches=Array.from(root.querySelectorAll(selector)).filter(visible);
+        if(matches.length){
+          box=matches[matches.length-1];
+          break;
+        }
       }
       if(!box) return false;
+
       box.focus();
+
       const selection=window.getSelection();
       const range=document.createRange();
       range.selectNodeContents(box);
       selection.removeAllRanges();
       selection.addRange(range);
+
+      // Important: remove any stale draft first. This prevents
+      // "Bot denemeBot deneme" and duplicate Max responses.
+      document.execCommand('delete',false,null);
+      if(String(box.textContent || '').trim()){
+        box.textContent='';
+      }
+      box.dispatchEvent(new InputEvent('input',{
+        bubbles:true,
+        inputType:'deleteContentBackward',
+        data:null
+      }));
+
+      box.focus();
+      const freshRange=document.createRange();
+      freshRange.selectNodeContents(box);
+      freshRange.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(freshRange);
+
       document.execCommand('insertText',false,message);
-      box.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText',data:message}));
-      return String(box.innerText || box.textContent || '').trim().length>0;
+      box.dispatchEvent(new InputEvent('input',{
+        bubbles:true,
+        inputType:'insertText',
+        data:message
+      }));
+
+      return String(box.innerText || box.textContent || '').trim()===String(message).trim();
     })()
     """
 
@@ -301,16 +315,62 @@ class EmbeddedWhatsAppBot(QObject):
     (() => {
       const root=document.querySelector('#main');
       if(!root) return false;
-      const buttons=Array.from(root.querySelectorAll('button,[role="button"]'));
+
+      const visible=el=>!!el && (el.offsetParent!==null || el.getClientRects().length>0);
+
+      const buttons=Array.from(root.querySelectorAll('button,[role="button"]')).filter(visible);
       const send=buttons.find(button=>{
         if(button.disabled || button.getAttribute('aria-disabled')==='true') return false;
-        const label=String(button.getAttribute('aria-label') || '').trim().toLocaleLowerCase('tr-TR');
+
+        const label=String(button.getAttribute('aria-label') || '')
+          .trim().toLocaleLowerCase('tr-TR');
+
         const testid=String(button.getAttribute('data-testid') || '');
-        const icon=button.querySelector('[data-icon="send"],[data-testid="send"],[data-testid="compose-btn-send"]');
-        return label==='gönder' || label==='send' || testid==='send' || testid==='compose-btn-send' || !!icon;
+
+        const icon=button.querySelector(
+          '[data-icon="send"],[data-testid="send"],[data-testid="compose-btn-send"]'
+        );
+
+        return (
+          label==='gönder' ||
+          label==='send' ||
+          testid==='send' ||
+          testid==='compose-btn-send' ||
+          !!icon
+        );
       });
-      if(!send) return false;
-      send.click();
+
+      if(send){
+        send.click();
+        return true;
+      }
+
+      // WhatsApp sometimes exposes the send icon only after keyboard input.
+      // Enter is a safe fallback for the normal text composer.
+      const box=
+        root.querySelector('footer div[contenteditable="true"][role="textbox"]') ||
+        root.querySelector('footer div[contenteditable="true"][data-lexical-editor="true"]') ||
+        root.querySelector('footer div[contenteditable="true"]');
+
+      if(!box) return false;
+
+      box.focus();
+      box.dispatchEvent(new KeyboardEvent('keydown',{
+        bubbles:true,
+        cancelable:true,
+        key:'Enter',
+        code:'Enter',
+        keyCode:13,
+        which:13
+      }));
+      box.dispatchEvent(new KeyboardEvent('keyup',{
+        bubbles:true,
+        cancelable:true,
+        key:'Enter',
+        code:'Enter',
+        keyCode:13,
+        which:13
+      }));
       return true;
     })()
     """
@@ -318,7 +378,13 @@ class EmbeddedWhatsAppBot(QObject):
     COMPOSER_EMPTY_JS = r"""
     (() => {
       const root=document.querySelector('#main');
-      const box=root?.querySelector('footer div[contenteditable="true"][role="textbox"],footer div[contenteditable="true"],[contenteditable="true"][data-lexical-editor="true"]');
+      if(!root) return false;
+
+      const box=
+        root.querySelector('footer div[contenteditable="true"][role="textbox"]') ||
+        root.querySelector('footer div[contenteditable="true"][data-lexical-editor="true"]') ||
+        root.querySelector('footer div[contenteditable="true"]');
+
       if(!box) return false;
       return String(box.innerText || box.textContent || '').trim()==='';
     })()
@@ -327,17 +393,34 @@ class EmbeddedWhatsAppBot(QObject):
     CLEAR_COMPOSER_JS = r"""
     (() => {
       const root=document.querySelector('#main');
-      const box=root?.querySelector('footer div[contenteditable="true"][role="textbox"],footer div[contenteditable="true"],[contenteditable="true"][data-lexical-editor="true"]');
+      if(!root) return false;
+
+      const box=
+        root.querySelector('footer div[contenteditable="true"][role="textbox"]') ||
+        root.querySelector('footer div[contenteditable="true"][data-lexical-editor="true"]') ||
+        root.querySelector('footer div[contenteditable="true"]');
+
       if(!box) return false;
+
       box.focus();
+
       const selection=window.getSelection();
       const range=document.createRange();
       range.selectNodeContents(box);
       selection.removeAllRanges();
       selection.addRange(range);
+
       document.execCommand('delete',false,null);
-      if(String(box.textContent || '').trim()) box.textContent='';
-      box.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward',data:null}));
+      if(String(box.textContent || '').trim()){
+        box.textContent='';
+      }
+
+      box.dispatchEvent(new InputEvent('input',{
+        bubbles:true,
+        inputType:'deleteContentBackward',
+        data:null
+      }));
+
       return true;
     })()
     """
@@ -346,7 +429,7 @@ class EmbeddedWhatsAppBot(QObject):
         self,
         response_fn: Callable[[str], str],
         page=None,
-        poll_ms: int = 1600,
+        poll_ms: int = 900,
         schedule: Optional[Callable[[int, Callable], None]] = None,
     ):
         super().__init__()
@@ -354,17 +437,22 @@ class EmbeddedWhatsAppBot(QObject):
         self.page = page
         self.running = False
         self._read_pending = False
-        self._opening_group = ""
-        self._open_attempts = 0
         self._outbox = deque()
         self._send_busy = False
         self._send_attempts = 0
         self._confirm_attempts = 0
         self._last_status = ""
-        self._schedule = schedule or (lambda milliseconds, callback: QTimer.singleShot(milliseconds, callback))
+        self._schedule = schedule or (
+            lambda milliseconds, callback: QTimer.singleShot(milliseconds, callback)
+        )
+
         self._timer = QTimer(self)
         self._timer.setInterval(max(500, int(poll_ms)))
         self._timer.timeout.connect(self.poll_once)
+
+        # No sidebar button is required. The reader starts by itself and waits
+        # for #Max başla inside whichever conversation the user opens.
+        self._schedule(700, self._auto_start_when_ready)
 
     @property
     def active(self):
@@ -372,41 +460,47 @@ class EmbeddedWhatsAppBot(QObject):
 
     def attach_page(self, page):
         self.page = page
+        self._auto_start_when_ready()
 
     def _status(self, text: str):
         if text and text != self._last_status:
             self._last_status = text
             self.status.emit(text)
 
+    def _auto_start_when_ready(self):
+        if not self.running:
+            self.start()
+
     def start(self, group: str = ""):
-        self.router.set_group(group)
-        self.running = True
-        self._timer.start()
-        if self.router.configured_group:
-            self._status(f"Uygulama içinde grup açılıyor: {self.router.configured_group}")
-            self._open_group(self.router.configured_group)
-        else:
-            self._status("Max hazır - uygulama içindeki sohbette #Max başla bekleniyor")
-        self._schedule(450, self.poll_once)
+        # group is intentionally ignored. Max listens to the conversation
+        # the human actually has open; it never types a saved chat name.
+        if not self.running:
+            self.running = True
+            self._timer.start()
+        self._status("Max dinleyici açık - WhatsApp sohbetinde #Max başla yazın")
+        self._schedule(300, self.poll_once)
         return True
 
     def stop(self):
+        # Keep the lightweight reader alive so #Max başla can activate Max again.
+        self.router.active = False
+        self._status("Max pasif - tekrar başlatmak için sohbete #Max başla yazın")
+
+    def set_group(self, group: str):
+        # Kept for app compatibility. Saved group names are no longer typed
+        # into WhatsApp because that caused chat names to land in the composer.
+        self._status("Max açık sohbeti kullanır - #Max başla yazın")
+        return True
+
+    def shutdown(self):
         self.running = False
         self.router.active = False
         self._timer.stop()
-        self._status("Max durduruldu")
-
-    def set_group(self, group: str):
-        self.router.set_group(group)
-        if self.router.configured_group:
-            self._status(f"Kayıtlı grup uygulama içinde açılıyor: {self.router.configured_group}")
-            self._open_group(self.router.configured_group)
-        else:
-            self._status("Grup seçimi otomatik - #Max başla yazılan sohbet kullanılacak")
 
     def poll_once(self):
         if not self.running or not self.page or self._read_pending:
             return
+
         self._read_pending = True
         try:
             self.page.runJavaScript(self.SNAPSHOT_JS, self._on_snapshot)
@@ -419,19 +513,20 @@ class EmbeddedWhatsAppBot(QObject):
         self._read_pending = False
         if not self.running:
             return
+
         try:
             if not isinstance(snapshot, dict):
-                if self.router.configured_group and not self._opening_group:
-                    self._open_group(self.router.configured_group)
+                self._status("Max dinleyici açık - WhatsApp'ta bir sohbet açın")
                 return
+
             result = self.router.process(snapshot)
-            if result.open_group:
-                self._open_group(result.open_group)
-                return
+
             if result.status:
                 self._status(result.status)
+
             for reply in result.replies:
                 self._send(reply)
+
         except Exception as error:
             self.log.emit(str(error))
             self._status("WhatsApp mesajı işlenemedi: " + str(error)[:120])
@@ -440,55 +535,15 @@ class EmbeddedWhatsAppBot(QObject):
     def _inject(script: str, token: str, value: str) -> str:
         return script.replace(token, json.dumps(str(value), ensure_ascii=False))
 
-    def _open_group(self, group: str):
-        name = " ".join(str(group or "").split())
-        if not name or not self.page:
-            return False
-        if _normalized(self._opening_group) == _normalized(name):
-            return True
-        self._opening_group = name
-        search_script = self._inject(self.SEARCH_GROUP_JS, "__GROUP_JSON__", name)
-
-        def searched(ok):
-            if not ok:
-                self._opening_group = ""
-                self._status("WhatsApp arama kutusu hazır değil; sayfanın açılmasını bekliyorum")
-                return
-            self._open_attempts = 0
-            self._schedule(350, try_open)
-
-        def try_open():
-            self._open_attempts += 1
-            open_script = self._inject(self.OPEN_GROUP_JS, "__GROUP_JSON__", name)
-
-            def opened(ok):
-                if ok:
-                    self._opening_group = ""
-                    self._status(f"WhatsApp grubu uygulama içinde açıldı: {name}")
-                    if self.running:
-                        self._schedule(350, self.poll_once)
-                    return
-                if self._open_attempts < 12:
-                    self._schedule(350, try_open)
-                else:
-                    self._opening_group = ""
-                    self._status(f"'{name}' bulunamadı; grup adını kontrol edin")
-
-            self.page.runJavaScript(open_script, opened)
-
-        try:
-            self.page.runJavaScript(search_script, searched)
-            return True
-        except Exception as error:
-            self._opening_group = ""
-            self.log.emit(str(error))
-            self._status("Grup açılamadı: " + str(error)[:120])
-            return False
-
     def _send(self, text: str):
         message = str(text or "").strip()
         if not message or not self.page:
             return False
+
+        # Do not enqueue the same pending text twice.
+        if message in self._outbox:
+            return True
+
         self._outbox.append(message)
         if not self._send_busy:
             self._begin_send()
@@ -497,16 +552,22 @@ class EmbeddedWhatsAppBot(QObject):
     def _begin_send(self):
         if self._send_busy or not self._outbox or not self.page:
             return
+
         self._send_busy = True
         message = self._outbox[0]
-        compose_script = self._inject(self.COMPOSE_MESSAGE_JS, "__MESSAGE_JSON__", message)
+        compose_script = self._inject(
+            self.COMPOSE_MESSAGE_JS,
+            "__MESSAGE_JSON__",
+            message,
+        )
 
         def composed(ok):
             if not ok:
-                self._fail_send("Mesaj kutusu bulunamadı")
+                self._fail_send("Mesaj kutusu bulunamadı veya metin doğru yazılamadı")
                 return
+
             self._send_attempts = 0
-            self._schedule(140, self._click_send)
+            self._schedule(120, self._click_send)
 
         try:
             self.page.runJavaScript(compose_script, composed)
@@ -519,13 +580,16 @@ class EmbeddedWhatsAppBot(QObject):
         def clicked(ok):
             if ok:
                 self._confirm_attempts = 0
-                self._schedule(220, self._confirm_send)
-            elif self._send_attempts < 4:
-                self._schedule(140, self._click_send)
+                self._schedule(180, self._confirm_send)
+            elif self._send_attempts < 3:
+                self._schedule(150, self._click_send)
             else:
-                self._fail_send("Gerçek Gönder düğmesi bulunamadı")
+                self._fail_send("Gönder düğmesi ve Enter gönderimi başarısız")
 
-        self.page.runJavaScript(self.CLICK_SEND_JS, clicked)
+        try:
+            self.page.runJavaScript(self.CLICK_SEND_JS, clicked)
+        except Exception as error:
+            self._fail_send(str(error))
 
     def _confirm_send(self):
         self._confirm_attempts += 1
@@ -536,12 +600,15 @@ class EmbeddedWhatsAppBot(QObject):
                 self._send_busy = False
                 self.sent.emit("WhatsApp", message)
                 self._begin_send()
-            elif self._confirm_attempts < 4:
+            elif self._confirm_attempts < 5:
                 self._schedule(180, self._confirm_send)
             else:
                 self._fail_send("Mesaj taslakta kaldı")
 
-        self.page.runJavaScript(self.COMPOSER_EMPTY_JS, confirmed)
+        try:
+            self.page.runJavaScript(self.COMPOSER_EMPTY_JS, confirmed)
+        except Exception as error:
+            self._fail_send(str(error))
 
     def _fail_send(self, reason: str):
         self._status("Max mesajı gönderemedi: " + str(reason)[:120])

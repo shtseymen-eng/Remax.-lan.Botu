@@ -1,0 +1,37 @@
+RE/MAX İlan Botu V0.36 - MAX Otomatik Dinleme + Gönderim Fix
+
+AMAÇ
+- BOTU BAŞLAT düğmesine basmadan WhatsApp okuyucuyu otomatik başlatmak.
+- Kullanıcı açık sohbete sadece #Max başla yazarak Max'i aktif edebilsin.
+- #Max durdur ile cevap modu pasif olsun ama okuyucu açık kalsın.
+- "Bot denemeBot deneme" gibi sohbet/grup adının mesaj kutusuna yazılması tamamen kaldırılsın.
+- Max cevaplarının mesaj kutusuna iki kez eklenmesi engellensin.
+- Gönder düğmesi bulunamazsa Enter yedeği kullanılsın.
+
+KÖK NEDEN
+Codex sürümünde kayıtlı WhatsApp grup adını otomatik arayan SEARCH_GROUP_JS / OPEN_GROUP_JS yapısı vardı.
+WhatsApp Web DOM'u değiştiğinde arama kutusu yerine mesaj kutusunun seçilmesi mümkündü.
+Bu nedenle "Bot deneme" gibi grup adı mesaj alanına yazılabiliyordu.
+
+Ayrıca mesaj yazma işlemi var olan taslağı temizlemeden insertText kullandığı için tekrar eden içerik oluşabiliyordu.
+
+YENİ ÇALIŞMA
+1. Uygulama açılır.
+2. WhatsApp Web normal şekilde yüklenir.
+3. Max okuyucu otomatik çalışır. Sol alttaki BOTU BAŞLAT artık zorunlu değildir.
+4. İstediğiniz grup veya özel sohbeti kendiniz açın.
+5. Sohbete #Max başla yazın.
+6. Max aynı açık sohbete tanıtım cevabını gönderir.
+7. #?, #danışmanlar ve ilan arama komutları kullanılabilir.
+8. #Max durdur Max cevap modunu pasifleştirir.
+9. Yeniden #Max başla ile tekrar açılır.
+
+GITHUB'A YÜKLE
+src/remax_bot/whatsapp_webengine.py
+tests/test_whatsapp_embedded_runtime.py
+tests/test_max_autostart_send.py
+
+Mevcut app.py dosyasını değiştirmeyin. Yeni whatsapp_webengine.py mevcut EmbeddedWhatsAppBot arayüzüyle uyumludur.
+
+NOT
+Ayarlar ekranındaki kayıtlı grup adı alanı uyumluluk için kalabilir, fakat Max artık bu adı WhatsApp'a otomatik yazmaz veya grup aramaz.

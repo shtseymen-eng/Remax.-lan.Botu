@@ -8,7 +8,7 @@ from PySide6.QtWidgets import *
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEngineProfile,QWebEnginePage
 
-from .core import DB,Listing,source_label
+from .core import DB,Listing,source_label,split_listings_by_site
 from .playwright_scanner import PlaywrightScanner
 from .importer import read_list_file,command_response,command_help,advisor_names,filter_listings,price_number
 from .whatsapp_webengine import EmbeddedWhatsAppBot
@@ -17,8 +17,11 @@ from . import __version__
 BLUE='#0B4DB8';NAVY='#062D69';RED='#E31837';GREEN='#13A84A'
 BG='#F4F7FB';CARD='#FFFFFF';BORDER='#D9E2EF';TEXT='#172033';MUTED='#667085'
 SOURCES={
-    'RE/MAX ÇARŞI':'https://remax.com.tr/tr/ofis/detay/carsi?tab=portfoylerimiz',
-    'RE/MAX ÇARŞI 2':'https://remax.com.tr/tr/ofis/detay/carsi-2?tab=portfoylerimiz'
+    'MyRE/MAX ÇARŞI':'https://remax.com.tr/tr/ofis/detay/carsi?tab=portfoylerimiz',
+    'MyRE/MAX ÇARŞI 2':'https://remax.com.tr/tr/ofis/detay/carsi-2?tab=portfoylerimiz',
+    'Emlakjet ÇARŞI':'https://www.emlakjet.com/emlak-ofisleri/remax-carsi-1662566',
+    'Sahibinden ÇARŞI':'https://carsigayrimenkulkocaeli.sahibinden.com/',
+    'Sahibinden ÇARŞI 2':'https://remaxcarsi2.sahibinden.com/'
 }
 
 def app_data():
@@ -132,7 +135,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
 
         self.stack=QStackedWidget()
         self.nav_buttons=[]
-        for i,t in enumerate(['Ana Sayfa','İlanlar','Veri Ekle','Web Sekmeleri','Ayarlar']):
+        for i,t in enumerate(['Ana Sayfa','İlanlar','Veri Ekle','Web Sekmeleri','Bot Testi','Ayarlar']):
             b=QPushButton(t)
             b.setObjectName('nav')
             b.setCheckable(True)
@@ -178,6 +181,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self._listings()
         self._data()
         self._web()
+        self._bot_test()
         self._settings()
         self.stack.setCurrentIndex(0)
 
@@ -223,33 +227,6 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.wa.setUrl(QUrl('https://web.whatsapp.com/'))
         wal.addWidget(self.wa,1)
 
-        cmdrow=QHBoxLayout()
-        self.quick_cmd=QLineEdit()
-        self.quick_cmd.setPlaceholderText('#Max başla / #Max başlat   veya   #izmit kiralık 55 bin')
-        sendcmd=QPushButton('KOMUTU TEST ET')
-        sendcmd.setObjectName('blue')
-        sendcmd.clicked.connect(self.quick_test)
-        cmdrow.addWidget(self.quick_cmd,1)
-        cmdrow.addWidget(sendcmd)
-        wal.addLayout(cmdrow)
-
-        result_head=QHBoxLayout()
-        result_label=QLabel('Bot Komut Sonucu')
-        result_label.setStyleSheet(f'color:{MUTED};font-size:11px;font-weight:800')
-        self.quick_toggle=QPushButton('▲ SONUCU GİZLE')
-        self.quick_toggle.setObjectName('ghost')
-        self.quick_toggle.clicked.connect(self.toggle_quick_result)
-        result_head.addWidget(result_label)
-        result_head.addStretch()
-        result_head.addWidget(self.quick_toggle)
-        wal.addLayout(result_head)
-
-        self.quick_result=QPlainTextEdit()
-        self.quick_result.setReadOnly(True)
-        self.quick_result.setMaximumHeight(150)
-        self.quick_result.setPlainText('Komutun yalnızca başında # olması yeterlidir.')
-        wal.addWidget(self.quick_result)
-
         l.addWidget(wa_card,1)
         self.stack.addWidget(p)
 
@@ -258,6 +235,18 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
             page=self.wa.page()
         )
         self.wabot.status.connect(self._wa_status)
+
+    def _new_listing_table(self):
+        table=QTableWidget(0,11)
+        table.setHorizontalHeaderLabels([
+            'Kaynak','Danışman / İlan Sahibi','Telefon','Başlık','Fiyat',
+            'Bölge','Oda','m²','Tür','İlan Tarihi','İlan Linki'
+        ])
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        [table.horizontalHeader().setSectionResizeMode(c,QHeaderView.Stretch) for c in [1,3,5,10]]
+        table.cellDoubleClicked.connect(lambda row,_col,t=table:self.open_link(t,row))
+        return table
 
     def _listings(self):
         p,l=self._page()
@@ -302,7 +291,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         lh.addWidget(self.scanprog)
         ll.addLayout(lh)
 
-        note=QLabel('TARA / GÜNCELLE seçilen RE/MAX kaynağını açar, portföyleri tarar ve bulunan ilanları ilan havuzunda günceller.')
+        note=QLabel('TARA / GÜNCELLE seçilen kaynağı açar. Başarılı tarama yalnızca o kaynağın listesini günceller; diğer sitelerdeki ilanlar korunur.')
         note.setWordWrap(True)
         note.setStyleSheet(f'color:{MUTED};font-size:11px;padding:2px 0 6px 0')
         ll.addWidget(note)
@@ -341,16 +330,20 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         filters.addWidget(clear)
         ll.addLayout(filters)
 
-        self.table=QTableWidget(0,11)
-        self.table.setHorizontalHeaderLabels([
-            'Kaynak','Danışman / İlan Sahibi','Telefon','Başlık','Fiyat',
-            'Bölge','Oda','m²','Tür','İlan Tarihi','İlan Linki'
-        ])
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        [self.table.horizontalHeader().setSectionResizeMode(c,QHeaderView.Stretch) for c in [1,3,5,10]]
-        self.table.cellDoubleClicked.connect(self.open_link)
-        ll.addWidget(self.table,1)
+        self.listing_tabs=QTabWidget()
+        self.site_tables={}
+        for site in ['Sahibinden','Emlakjet','MyRE/MAX']:
+            table=self._new_listing_table()
+            self.site_tables[site]=table
+            self.listing_tabs.addTab(table,site)
+        ll.addWidget(self.listing_tabs,1)
+
+        self.other_box=QGroupBox('İçe Aktarılan / Kaynağı Belirsiz')
+        other_layout=QVBoxLayout(self.other_box)
+        self.other_table=self._new_listing_table()
+        self.other_table.setMaximumHeight(210)
+        other_layout.addWidget(self.other_table)
+        ll.addWidget(self.other_box)
 
         l.addWidget(listing_card,1)
         self.stack.addWidget(p)
@@ -417,10 +410,54 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
 
         self.browser=QWebEngineView()
         self.browser.setPage(QWebEnginePage(self.profile,self.browser))
-        self.browser.setUrl(QUrl(SOURCES['RE/MAX ÇARŞI']))
+        self.browser.setUrl(QUrl(SOURCES['MyRE/MAX ÇARŞI']))
         l.addWidget(self.browser,1)
         self.stack.addWidget(p)
         openb.clicked.connect(lambda:self.browser.setUrl(QUrl(SOURCES[self.web_source.currentText()])))
+
+    def _bot_test(self):
+        p,l=self._page()
+        t=QLabel('Bot Testi')
+        t.setStyleSheet('font-size:24px;font-weight:900')
+        l.addWidget(t)
+
+        test=QGroupBox('Bot Komut Testi')
+        tf=QVBoxLayout(test)
+        self.quick_cmd=QLineEdit()
+        self.quick_cmd.setPlaceholderText('#Max başla / #Max başlat / #? / #danışmanlar / #izmit kiralık 55 bin')
+        cb=QPushButton('KOMUTU TEST ET')
+        cb.setObjectName('blue')
+        cb.clicked.connect(self.quick_test)
+        tf.addWidget(self.quick_cmd)
+        tf.addWidget(cb)
+
+        result_head=QHBoxLayout()
+        result_label=QLabel('Bot Komut Sonucu')
+        result_label.setStyleSheet(f'color:{MUTED};font-size:11px;font-weight:800')
+        self.quick_toggle=QPushButton('▲ SONUCU GİZLE')
+        self.quick_toggle.setObjectName('ghost')
+        self.quick_toggle.clicked.connect(self.toggle_quick_result)
+        result_head.addWidget(result_label)
+        result_head.addStretch()
+        result_head.addWidget(self.quick_toggle)
+        tf.addLayout(result_head)
+
+        self.quick_result=QPlainTextEdit()
+        self.quick_result.setReadOnly(True)
+        self.quick_result.setMaximumHeight(220)
+        self.quick_result.setPlainText('Komutun yalnızca başında # olması yeterlidir.')
+        tf.addWidget(self.quick_result)
+        l.addWidget(test)
+
+        commands=QGroupBox('Komut Listesi')
+        cf=QVBoxLayout(commands)
+        self.commandlist=QPlainTextEdit()
+        self.commandlist.setReadOnly(True)
+        self.commandlist.setPlainText(command_help())
+        self.commandlist.setMinimumHeight(280)
+        cf.addWidget(self.commandlist)
+        l.addWidget(commands,1)
+        self.stack.addWidget(p)
 
     def _settings(self):
         p,l=self._page()
@@ -447,29 +484,6 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         save.clicked.connect(self.save_settings)
         l.addWidget(save,0,Qt.AlignLeft)
 
-        test=QGroupBox('Bot Komut Testi')
-        tf=QVBoxLayout(test)
-        self.cmdtest=QLineEdit()
-        self.cmdtest.setPlaceholderText('#Max başla / #Max başlat / #? / #danışmanlar')
-        self.cmdout=QPlainTextEdit()
-        self.cmdout.setReadOnly(True)
-        cb=QPushButton('KOMUTU TEST ET')
-        cb.setObjectName('blue')
-        cb.clicked.connect(self.test_command)
-        tf.addWidget(self.cmdtest)
-        tf.addWidget(cb)
-        tf.addWidget(self.cmdout)
-        l.addWidget(test)
-
-        commands=QGroupBox('Komut Listesi')
-        cf=QVBoxLayout(commands)
-        self.commandlist=QPlainTextEdit()
-        self.commandlist.setReadOnly(True)
-        self.commandlist.setPlainText(command_help())
-        self.commandlist.setMinimumHeight(250)
-        cf.addWidget(self.commandlist)
-        l.addWidget(commands)
-
         l.addStretch()
         self.stack.addWidget(p)
 
@@ -494,14 +508,24 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.fill(all_rows if rows is None else rows)
 
     def fill(self,rows):
-        self.table.setRowCount(len(rows))
+        buckets=split_listings_by_site(rows)
+        for index,(site,table) in enumerate(self.site_tables.items()):
+            site_rows=buckets[site]
+            self.listing_tabs.setTabText(index,f'{site} ({len(site_rows)})')
+            self._fill_listing_table(table,site_rows)
+        other_rows=buckets['Diğer']
+        self._fill_listing_table(self.other_table,other_rows)
+        self.other_box.setVisible(bool(other_rows))
+
+    def _fill_listing_table(self,table,rows):
+        table.setRowCount(len(rows))
         for r,x in enumerate(rows):
             vals=[
                 source_label(x.source_url),x.advisor,x.phone,x.title,x.price,x.location,x.rooms,x.sqm,
                 ' / '.join(v for v in [x.transaction_type,x.property_type] if v),x.listing_date,x.url
             ]
             for c,v in enumerate(vals):
-                self.table.setItem(r,c,QTableWidgetItem(v))
+                table.setItem(r,c,QTableWidgetItem(v))
 
     def apply_filters(self):
         advisor='' if self.advisor_filter.currentIndex()==0 else self.advisor_filter.currentText()
@@ -587,10 +611,6 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.quick_result.setVisible(not visible)
         self.quick_toggle.setText('▼ SONUCU GÖSTER' if visible else '▲ SONUCU GİZLE')
 
-    def test_command(self):
-        out=command_response(self.db.all(),self.cmdtest.text().strip())
-        self.cmdout.setPlainText(out or 'Bot bu mesajı görmezden gelir.')
-
     def save_settings(self):
         self.settings.update(
             group=self.group.text().strip(),
@@ -601,8 +621,8 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.wabot.set_group(self.settings.get('group',''))
         self.refresh()
 
-    def open_link(self,row,col):
-        x=self.table.item(row,10)
+    def open_link(self,table,row):
+        x=table.item(row,10)
         if x and x.text():
             self._go(3)
             self.nav_buttons[3].setChecked(True)

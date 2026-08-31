@@ -6,12 +6,13 @@ APP = (ROOT / "src/remax_bot/app.py").read_text(encoding="utf-8")
 
 
 def test_home_uses_visible_whatsapp_panel_for_the_bot():
-    home = APP[APP.index("    def _home(self):"):APP.index("    def _listings(self):")]
+    home = APP[APP.index("    def _home(self):"):APP.index("    def _new_listing_table(self):")]
     assert "WhatsApp Web" in home
     assert "Max bu paneli doğrudan kullanır" in home
     assert "gerçek Chrome WhatsApp" not in home
     assert "QTableWidget" not in home
     assert "TARA / GÜNCELLE" not in home
+    assert "KOMUTU TEST ET" not in home
 
 
 def test_sidebar_keeps_bot_controls_and_branding():
@@ -23,9 +24,12 @@ def test_sidebar_keeps_bot_controls_and_branding():
 
 
 def test_navigation_and_listing_tools_remain_available():
-    assert "['Ana Sayfa','İlanlar','Veri Ekle','Web Sekmeleri','Ayarlar']" in APP
+    assert "['Ana Sayfa','İlanlar','Veri Ekle','Web Sekmeleri','Bot Testi','Ayarlar']" in APP
     listings = APP[APP.index("    def _listings(self):"):APP.index("    def _data(self):")]
-    assert "self.table=QTableWidget" in listings
+    assert "self.listing_tabs=QTabWidget" in listings
+    assert "'Sahibinden','Emlakjet','MyRE/MAX'" in listings
+    assert "self.other_table" in listings
+    assert "İçe Aktarılan / Kaynağı Belirsiz" in listings
     assert "self.advisor_filter" in listings
     assert "TARA / GÜNCELLE" in listings
     assert "EXCEL / CSV YÜKLE" in listings
@@ -38,6 +42,9 @@ def test_command_test_result_can_be_collapsed():
     assert "SONUCU GİZLE" in APP
 
 
-def test_settings_show_group_and_command_help():
+def test_settings_show_group_but_bot_test_has_its_own_page():
     assert "WhatsApp grup/sohbet adı:" in APP
-    assert "self.commandlist.setPlainText(command_help())" in APP
+    bot_test = APP[APP.index("    def _bot_test(self):"):APP.index("    def _settings(self):")]
+    settings = APP[APP.index("    def _settings(self):"):APP.index("    def refresh(self")]
+    assert "self.commandlist.setPlainText(command_help())" in bot_test
+    assert "Bot Komut Testi" not in settings

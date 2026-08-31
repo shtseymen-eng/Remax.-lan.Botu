@@ -26,3 +26,4 @@ def test_parse_remax_detail_reads_real_remax_labels():
     assert x.sqm == '148 m²'
     assert x.listing_date == '27.08.2026'
     assert x.phone == '0532 386 25 47'
+    assert x.advisor == 'Berkan Aslan'

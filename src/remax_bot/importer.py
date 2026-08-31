@@ -1,7 +1,7 @@
 from __future__ import annotations
 import csv, re
 from pathlib import Path
-from .core import Listing, norm
+from .core import Listing, norm, source_site, listing_identity
 
 FIELD_ALIASES={
  "listing_id":["ilan no","ilan numarasi","portfoy no","portfoy numarasi","id"],
@@ -66,6 +66,10 @@ def is_valid_advisor(name):
     if len(words)<2:return False
     letters=sum(ch.isalpha() for ch in raw)
     return letters >= max(4,int(len(raw)*0.55))
+def _same_advisor_name(left,right):
+    a=norm(left).split(); b=norm(right).split()
+    if a==b:return True
+    return bool(a and b and a[0]==b[0] and a[-1]==b[-1] and (len(a)==2 or len(b)==2))
 def advisor_names(items):
     names={x.advisor.strip() for x in items if is_valid_advisor(x.advisor)}
     return sorted(names,key=norm)
@@ -155,14 +159,41 @@ def command_response(items,text,limit=12):
     if cmd["type"]=="ignore":return None
     if cmd["type"]=="help":return command_help()
     if cmd["type"]=="advisors":
-        by={}
+        unique_rows={}
         for x in items:
+            site=source_site(x.source_url,x.url)
+            unique_key=(site,listing_identity(x))
+            current=unique_rows.get(unique_key)
+            if current is None or (not is_valid_advisor(current.advisor) and is_valid_advisor(x.advisor)):
+                unique_rows[unique_key]=x
+        groups=[]
+        for unique_key,x in unique_rows.items():
+            site=unique_key[0]
             if is_valid_advisor(x.advisor):
-                name=x.advisor.strip(); by[name]=by.get(name,0)+1
-        if not by:return "İlan havuzunda geçerli danışman bilgisi bulunamadı."
+                name=x.advisor.strip()
+                group=next((g for g in groups if _same_advisor_name(g["name"],name)),None)
+                if group is None:
+                    group={"name":name,"counts":{"MyRE/MAX":0,"Emlakjet":0,"Sahibinden":0,"Diğer":0}}
+                    groups.append(group)
+                current=group["name"]
+                if len(norm(name).split())<len(norm(current).split()) or (current.isupper() and not name.isupper()):
+                    group["name"]=name
+                counts=group["counts"]
+                counts[site]+=1
+        if not groups:return "İlan havuzunda geçerli danışman bilgisi bulunamadı."
         lines=["DANIŞMAN İLAN DAĞILIMI",""]
-        lines += [f"{k}: {v} ilan" for k,v in sorted(by.items(),key=lambda kv:(-kv[1],norm(kv[0])))]
-        lines += ["",f"Toplam ilan: {len(items)}",f"Toplam danışman: {len(by)}"]
+        ordered=sorted(groups,key=lambda g:(-sum(g["counts"].values()),norm(g["name"])))
+        for group in ordered:
+            name=group["name"]; counts=group["counts"]
+            total=sum(counts.values())
+            lines += [
+                f"{name} — Toplam {total} ilan",
+                f"MyRE/MAX: {counts['MyRE/MAX']} | Emlakjet: {counts['Emlakjet']} | Sahibinden: {counts['Sahibinden']}",
+            ]
+            if counts["Diğer"]:
+                lines.append(f"Diğer: {counts['Diğer']}")
+            lines.append("")
+        lines += ["",f"Toplam ilan: {len(unique_rows)}",f"Toplam danışman: {len(groups)}"]
         return "\n".join(lines)
     matches=search(items,cmd.get("query","")); target=cmd.get("target_price")
     if target is not None:

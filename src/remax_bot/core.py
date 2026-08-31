@@ -14,12 +14,26 @@ def source_key(url:str)->str:
     path=p.path.rstrip("/") or "/"
     return urlunsplit((p.scheme.lower(),p.netloc.lower(),path,"",""))
 
+def source_site(source_url:str,listing_url:str="")->str:
+    for value in (source_url,listing_url):
+        host=urlsplit((value or "").strip()).netloc.lower().split(":")[0]
+        if host=="remax.com.tr" or host.endswith(".remax.com.tr"):
+            return "MyRE/MAX"
+        if host=="emlakjet.com" or host.endswith(".emlakjet.com"):
+            return "Emlakjet"
+        if host=="sahibinden.com" or host.endswith(".sahibinden.com"):
+            return "Sahibinden"
+    return "Diğer"
+
 def source_label(url:str)->str:
     host=urlsplit(url).netloc.lower().split(":")[0]
-    host=host.removesuffix(".sahibinden.com")
-    if "remax.com.tr" in host and "/carsi-2" in (url or ""): return "RE/MAX ÇARŞI 2"
-    if "remax.com.tr" in host and "/carsi" in (url or ""): return "RE/MAX ÇARŞI"
-    labels={"carsigayrimenkulkocaeli":"RE/MAX ÇARŞI","remaxcarsi2":"RE/MAX ÇARŞI 2","remax.com.tr":"RE/MAX WEB"}
+    if (host=="remax.com.tr" or host.endswith(".remax.com.tr")) and "/carsi-2" in (url or ""): return "MyRE/MAX ÇARŞI 2"
+    if host=="remax.com.tr" or host.endswith(".remax.com.tr"): return "MyRE/MAX ÇARŞI"
+    if host=="emlakjet.com" or host.endswith(".emlakjet.com"): return "Emlakjet ÇARŞI"
+    labels={
+        "carsigayrimenkulkocaeli.sahibinden.com":"Sahibinden ÇARŞI",
+        "remaxcarsi2.sahibinden.com":"Sahibinden ÇARŞI 2",
+    }
     if (url or "").startswith("excel://"): return "EXCEL / LİSTE"
     if (url or "").startswith("manual://"): return "MANUEL"
     return labels.get(host,host or url)
@@ -39,6 +53,17 @@ class Listing:
     sqm:str=""
     listing_date:str=""
     source_url:str=""
+
+def listing_identity(item:Listing)->str:
+    if (item.url or "").strip():
+        return source_key(item.url)
+    return str(item.listing_id or "").strip()
+
+def split_listings_by_site(items)->dict[str,list[Listing]]:
+    buckets={"Sahibinden":[],"Emlakjet":[],"MyRE/MAX":[],"Diğer":[]}
+    for item in items:
+        buckets[source_site(item.source_url,item.url)].append(item)
+    return buckets
 
 class DB:
     def __init__(self,path):

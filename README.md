@@ -4,7 +4,9 @@ Windows ve macOS üzerinde çalışan ilan yönetimi ve WhatsApp yanıt uygulama
 
 ## Özellikler
 
-- RE/MAX ÇARŞI ve RE/MAX ÇARŞI 2 portföylerini tarar.
+- İki MyRE/MAX ofisini, Emlakjet ÇARŞI ofisini ve iki Sahibinden mağazasını ayrı kaynaklar olarak tarar.
+- İlanlar sayfasını Sahibinden, Emlakjet ve MyRE/MAX sekmelerinde ayrı listeler.
+- `#danışmanlar` komutunda her danışmanın üç sitedeki ilan adetlerini ayrı ayrı gösterir.
 - Excel/CSV dosyalarından veya manuel girişten ilan ekler.
 - İlanları danışman, konum, tür ve fiyata göre filtreler.
 - Uygulamanın içindeki WhatsApp Web panelinden mesajları okur ve yanıtlar.
@@ -46,6 +48,15 @@ python -m remax_bot.app
 4. Durum satırında grubun açıldığı görüldükten sonra sohbete `#Max başla` veya `#Max başlat` yazın.
 5. `#?` ile komut yardımını veya örneğin `#izmit kiralık 3+1#` sorgusunu gönderin.
 6. `#Max durdur` ile cevap modunu kapatın.
+
+Komutları WhatsApp'a göndermeden denemek için soldaki **Bot Testi** sayfasını kullanabilirsiniz. Ana Sayfa yalnızca uygulamaya gömülü WhatsApp Web panelini gösterir.
+
+## İlan kaynaklarını güncelleme
+
+1. **İlanlar** sayfasındaki kaynak listesinden MyRE/MAX, Emlakjet veya Sahibinden kaynağını seçin.
+2. **TARA / GÜNCELLE** düğmesine basın.
+3. Site güvenlik doğrulaması isterse açılan tarama penceresinde doğrulamayı tamamlayın.
+4. Tarama eksik kalırsa o kaynağın önceki ilanları korunur; başarılı olursa yalnızca seçilen kaynak yenilenir.
 
 Grup adı boş bırakılırsa Max, `#Max başla` veya `#Max başlat` komutunun görüldüğü açık sohbete kilitlenir. Ayarlarda grup adı varsa o grup önceliklidir ve diğer sohbetlerdeki komutlar yok sayılır.
 

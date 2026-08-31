@@ -1,4 +1,4 @@
-RE/MAX İlan Botu V0.37 - WhatsApp Mesaj Okuyucu Düzeltmesi
+RE/MAX İlan Botu V0.38 - Çoklu İlan Kaynağı
 
 ÇALIŞMA ŞEKLİ
 1. Uygulama içindeki WhatsApp Web panelinde oturum açın.
@@ -8,12 +8,11 @@ RE/MAX İlan Botu V0.37 - WhatsApp Mesaj Okuyucu Düzeltmesi
 5. #?, #danışmanlar ve ilan arama komutlarını kullanabilirsiniz.
 6. #Max durdur cevap modunu kapatır; #Max başla yeniden açar.
 
-V0.37 DÜZELTMELERİ
-- Yeni WhatsApp Web yapısında eski #main alanı bulunmasa da mesajlar okunur.
-- Sohbet başlığı geçici olarak bulunamadığında dinleyici durmaz.
-- Grup araması yalnızca sol sohbet listesinde yapılır; mesaj kutusuna grup adı yazılmaz.
-- Eski mesajlar ilk açılışta yalnızca kaydedilir ve tekrar cevaplanmaz.
-- Aynı komut ikinci kez işlenmez.
-- Mesaj gönderimi taslakta kalırsa güvenli biçimde temizlenir.
+V0.38 YENİLİKLERİ
+- MyRE/MAX, Emlakjet ve Sahibinden kaynakları ayrı ayrı taranır.
+- İlanlar sayfasında Sahibinden, Emlakjet ve MyRE/MAX için üç ayrı sekme vardır.
+- #danışmanlar komutu her danışmanın her sitedeki ilan adetlerini gösterir.
+- Bot Testi ayrı sol menü sayfasına taşındı; Ana Sayfa yalnızca WhatsApp panelini gösterir.
+- Eksik veya başarısız taramada ilgili kaynağın önceki ilanları korunur.
 
 Hazır Windows ve macOS paketleri GitHub Actions bölümündeki son başarılı çalıştırmanın Artifacts alanındadır.

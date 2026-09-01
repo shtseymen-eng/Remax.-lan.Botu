@@ -234,7 +234,9 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
             lambda text:command_response(
                 self.db.all(),text,link_source=self.settings.get('link_source','MyRE/MAX')
             ),
-            page=self.wa.page()
+            page=self.wa.page(),
+            initial_group=self.settings.get('group',''),
+            start_active=bool(self.settings.get('bot')),
         )
         self.wabot.status.connect(self._wa_status)
 

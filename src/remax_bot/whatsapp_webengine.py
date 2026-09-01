@@ -93,6 +93,7 @@ class MessageRouter:
         self.seen = set()
         self._seen_order = deque()
         self.primed_chats = set()
+        self.accept_latest_on_prime = False
 
     def set_group(self, group: str):
         configured_group = " ".join(str(group or "").split())
@@ -106,6 +107,7 @@ class MessageRouter:
         self.seen.clear()
         self._seen_order.clear()
         self.primed_chats.clear()
+        self.accept_latest_on_prime = False
 
     def _remember(self, message_id: str):
         if not message_id or message_id in self.seen:
@@ -149,11 +151,26 @@ class MessageRouter:
         # First sight of a chat only records history. This stops an old #Max command
         # from reactivating Max when the user changes conversations.
         if chat_id not in self.primed_chats:
+            latest_id = ""
+            if self.active and self.accept_latest_on_prime:
+                for message in reversed(messages):
+                    if not isinstance(message, dict):
+                        continue
+                    latest_id = str(message.get("id") or "").strip()
+                    if latest_id:
+                        break
             for message in messages:
-                self._remember(str((message or {}).get("id") or "").strip())
+                message_id = str((message or {}).get("id") or "").strip()
+                if message_id != latest_id:
+                    self._remember(message_id)
             self.primed_chats.add(chat_id)
-            result.status = f"Max dinleyici hazır - {title} içinde #Max başla yazın"
-            return result
+            self.accept_latest_on_prime = False
+            if self.active:
+                result.status = f"Max aktif - {title} dinleniyor"
+            else:
+                result.status = f"Max dinleyici hazır - {title} içinde #Max başla yazın"
+            if not latest_id:
+                return result
 
         for message in messages:
             if not isinstance(message, dict):
@@ -205,33 +222,115 @@ class EmbeddedWhatsAppBot(QObject):
     log = Signal(str)
     sent = Signal(str, str)
 
-    SNAPSHOT_JS = r"""
-    (() => {
+    DEEP_DOM_JS = r"""
       const clean=value=>String(value || '').replace(/\s+/g,' ').trim();
       const visible=el=>!!el && (el.offsetParent!==null || el.getClientRects().length>0);
 
-      const composer=
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"][role="textbox"]')).find(visible) ||
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"][data-lexical-editor="true"]')).find(visible) ||
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"]')).find(visible);
+      const deepRoots=[document];
+      const knownRoots=new Set(deepRoots);
+      const deepAll=selector=>{
+        const found=[];
+        const knownElements=new Set();
+        for(let index=0;index<deepRoots.length;index++){
+          const root=deepRoots[index];
+          try{
+            for(const element of Array.from(root.querySelectorAll(selector))){
+              if(!knownElements.has(element)){
+                knownElements.add(element);
+                found.push(element);
+              }
+            }
+            for(const element of Array.from(root.querySelectorAll('*'))){
+              const shadow=element.shadowRoot;
+              if(shadow && !knownRoots.has(shadow)){
+                knownRoots.add(shadow);
+                deepRoots.push(shadow);
+              }
+            }
+          }catch(_error){}
+        }
+        return found;
+      };
+
+      const deepClosest=(element,selector)=>{
+        let current=element;
+        const visited=new Set();
+        while(current && !visited.has(current)){
+          visited.add(current);
+          try{
+            if(current.matches?.(selector)) return current;
+          }catch(_error){}
+          if(current.parentElement){
+            current=current.parentElement;
+            continue;
+          }
+          const root=current.getRootNode?.();
+          current=root?.host || null;
+        }
+        return null;
+      };
+
+      const inSidebar=element=>!!deepClosest(
+        element,
+        '#side,#pane-side,[data-testid="chat-list"],[aria-label="Sohbet listesi"],[aria-label="Chat list"]'
+      );
+
+      const findComposer=()=>{
+        const selectors=[
+          'footer div[contenteditable="true"]',
+          '[contenteditable="true"][role="textbox"]',
+          '[contenteditable="true"][data-lexical-editor="true"]',
+          '[contenteditable="true"][aria-placeholder]',
+          '[contenteditable="true"][data-tab]',
+          '[contenteditable="true"]'
+        ];
+        const candidates=[...new Set(
+          selectors.reduce((all,selector)=>all.concat(deepAll(selector)),[])
+        )].filter(element=>visible(element) && !inSidebar(element));
+
+        const labelled=candidates.find(element=>{
+          const label=clean(
+            element.getAttribute?.('aria-label') ||
+            element.getAttribute?.('aria-placeholder') ||
+            element.getAttribute?.('placeholder')
+          ).toLocaleLowerCase('tr-TR');
+          return /mesaj|message|yaz|type/.test(label);
+        });
+
+        return labelled || candidates[candidates.length-1] || null;
+      };
+    """
+
+    SNAPSHOT_JS = r"""
+    (() => {
+    """ + DEEP_DOM_JS + r"""
+
+      const composer=findComposer();
 
       const candidates=[
-        ...document.querySelectorAll('[data-testid="msg-container"]'),
-        ...document.querySelectorAll('.message-in,.message-out'),
-        ...document.querySelectorAll('[data-pre-plain-text]')
+        ...deepAll('[data-testid="msg-container"]'),
+        ...deepAll('.message-in,.message-out'),
+        ...deepAll('[data-pre-plain-text]'),
+        ...deepAll('[data-id]'),
+        ...deepAll('[data-testid="msg-text"]'),
+        ...deepAll('span.selectable-text.copyable-text'),
+        ...deepAll('span.selectable-text'),
+        ...deepAll('[data-lexical-text="true"]')
       ];
 
-      if(!candidates.length && !composer) return null;
-
-      const root=document.querySelector('#main');
+      const root=deepAll('#main')[0] || document.querySelector('#main');
       const header=
         root?.querySelector('header') ||
-        document.querySelector('[data-testid="conversation-header"]');
+        deepAll('[data-testid="conversation-header"]')[0] ||
+        deepAll('header').find(element=>!inSidebar(element));
       const titleNode=
         header?.querySelector('[data-testid="conversation-info-header-chat-title"]') ||
         header?.querySelector('[data-testid="conversation-info-header"] span[dir="auto"]') ||
         header?.querySelector('span[dir="auto"][title]') ||
-        header?.querySelector('span[dir="auto"]');
+        header?.querySelector('span[dir="auto"]') ||
+        deepAll('[data-testid="conversation-info-header-chat-title"]').find(element=>!inSidebar(element));
+
+      if(!candidates.length && !composer && !header) return null;
 
       const detectedTitle=clean(
         titleNode?.getAttribute?.('title') ||
@@ -244,26 +343,32 @@ class EmbeddedWhatsAppBot(QObject):
       let chatToken='';
 
       for(const candidate of candidates.slice(-300)){
-        const row=
-          candidate.closest?.('[data-testid="msg-container"],.message-in,.message-out,[data-id]') ||
+        if(deepClosest(candidate,'[contenteditable="true"]')) continue;
+
+        const row=deepClosest(
+          candidate,
+          '[data-testid="msg-container"],.message-in,.message-out,[data-id],[role="row"]'
+        ) ||
           candidate;
 
-        if(!row || seenRows.has(row)) continue;
+        if(!row || inSidebar(row) || seenRows.has(row)) continue;
         seenRows.add(row);
 
-        let dataNode=row;
-        while(dataNode && !dataNode.getAttribute?.('data-id')){
-          dataNode=dataNode.parentElement;
-        }
+        const dataNode=row.getAttribute?.('data-id') ? row : deepClosest(row,'[data-id]');
 
         const meta=
           (candidate.matches?.('[data-pre-plain-text]') ? candidate : null) ||
           row.querySelector?.('[data-pre-plain-text]');
 
-        const textNode=
+        const candidateText=candidate.matches?.(
+          '[data-testid="msg-text"],span.selectable-text.copyable-text,'+
+          'span.selectable-text,[data-pre-plain-text],[data-lexical-text="true"]'
+        ) ? candidate : null;
+        const textNode=candidateText ||
           row.querySelector?.('[data-testid="msg-text"]') ||
           row.querySelector?.('span.selectable-text.copyable-text') ||
           row.querySelector?.('span[class*="selectable-text"]') ||
+          row.querySelector?.('[data-lexical-text="true"]') ||
           row.querySelector?.('[class*="copyable-text"] span[dir]');
 
         const text=clean(
@@ -296,9 +401,10 @@ class EmbeddedWhatsAppBot(QObject):
         },
         messages:rows.slice(-120),
         diagnostics:{
-          messageContainers:candidates.length,
+          messageContainers:seenRows.size,
           composer:!!composer,
-          main:!!root
+          main:!!root,
+          deepRoots:deepRoots.length
         }
       };
     })()
@@ -378,22 +484,8 @@ class EmbeddedWhatsAppBot(QObject):
     COMPOSE_MESSAGE_JS = r"""
     (() => {
       const message=__MESSAGE_JSON__;
-      const visible=el=>!!el && (el.offsetParent!==null || el.getClientRects().length>0);
-
-      const selectors=[
-        'footer div[contenteditable="true"][role="textbox"]',
-        'footer div[contenteditable="true"][data-lexical-editor="true"]',
-        'footer div[contenteditable="true"]'
-      ];
-
-      let box=null;
-      for(const selector of selectors){
-        const matches=Array.from(document.querySelectorAll(selector)).filter(visible);
-        if(matches.length){
-          box=matches[matches.length-1];
-          break;
-        }
-      }
+    """ + DEEP_DOM_JS + r"""
+      const box=findComposer();
       if(!box) return false;
 
       box.focus();
@@ -436,11 +528,9 @@ class EmbeddedWhatsAppBot(QObject):
 
     CLICK_SEND_JS = r"""
     (() => {
-      const visible=el=>!!el && (el.offsetParent!==null || el.getClientRects().length>0);
+    """ + DEEP_DOM_JS + r"""
 
-      const buttons=Array.from(
-        document.querySelectorAll('footer button,footer [role="button"],button,[role="button"]')
-      ).filter(visible);
+      const buttons=deepAll('button,[role="button"]').filter(visible);
       const send=buttons.find(button=>{
         if(button.disabled || button.getAttribute('aria-disabled')==='true') return false;
 
@@ -469,10 +559,7 @@ class EmbeddedWhatsAppBot(QObject):
 
       // WhatsApp sometimes exposes the send icon only after keyboard input.
       // Enter is a safe fallback for the normal text composer.
-      const box=
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"][role="textbox"]')).find(visible) ||
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"][data-lexical-editor="true"]')).find(visible) ||
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"]')).find(visible);
+      const box=findComposer();
 
       if(!box) return false;
 
@@ -499,11 +586,8 @@ class EmbeddedWhatsAppBot(QObject):
 
     COMPOSER_EMPTY_JS = r"""
     (() => {
-      const visible=el=>!!el && (el.offsetParent!==null || el.getClientRects().length>0);
-      const box=
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"][role="textbox"]')).find(visible) ||
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"][data-lexical-editor="true"]')).find(visible) ||
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"]')).find(visible);
+    """ + DEEP_DOM_JS + r"""
+      const box=findComposer();
 
       if(!box) return false;
       return String(box.innerText || box.textContent || '').trim()==='';
@@ -512,11 +596,8 @@ class EmbeddedWhatsAppBot(QObject):
 
     CLEAR_COMPOSER_JS = r"""
     (() => {
-      const visible=el=>!!el && (el.offsetParent!==null || el.getClientRects().length>0);
-      const box=
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"][role="textbox"]')).find(visible) ||
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"][data-lexical-editor="true"]')).find(visible) ||
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"]')).find(visible);
+    """ + DEEP_DOM_JS + r"""
+      const box=findComposer();
 
       if(!box) return false;
 
@@ -546,11 +627,8 @@ class EmbeddedWhatsAppBot(QObject):
     CLEAR_LEAKED_GROUP_DRAFT_JS = r"""
     (() => {
       const wanted=__GROUP_JSON__;
-      const visible=el=>!!el && (el.offsetParent!==null || el.getClientRects().length>0);
-      const box=
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"][role="textbox"]')).find(visible) ||
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"][data-lexical-editor="true"]')).find(visible) ||
-        Array.from(document.querySelectorAll('footer div[contenteditable="true"]')).find(visible);
+    """ + DEEP_DOM_JS + r"""
+      const box=findComposer();
 
       if(!box || !wanted) return false;
       const compact=value=>String(value || '').replace(/\s+/g,'').toLocaleLowerCase('tr-TR');
@@ -578,6 +656,8 @@ class EmbeddedWhatsAppBot(QObject):
         page=None,
         poll_ms: int = 900,
         schedule: Optional[Callable[[int, Callable], None]] = None,
+        initial_group: str = "",
+        start_active: bool = False,
     ):
         super().__init__()
         self.router = MessageRouter(response_fn)
@@ -592,6 +672,8 @@ class EmbeddedWhatsAppBot(QObject):
         self._send_attempts = 0
         self._confirm_attempts = 0
         self._last_status = ""
+        self._initial_group = " ".join(str(initial_group or "").split())
+        self._start_active = bool(start_active)
         self._schedule = schedule or (
             lambda milliseconds, callback: QTimer.singleShot(milliseconds, callback)
         )
@@ -619,21 +701,37 @@ class EmbeddedWhatsAppBot(QObject):
 
     def _auto_start_when_ready(self):
         if not self.running:
-            self.start()
+            self.start(
+                self._initial_group,
+                activate=self._start_active,
+                process_latest_on_first=False,
+            )
 
-    def start(self, group: str = ""):
+    def start(
+        self,
+        group: str = "",
+        activate: bool = True,
+        process_latest_on_first: bool = True,
+    ):
         previous = self.router.configured_group
         self.router.set_group(group)
+        if activate:
+            self.router.active = True
+            self.router.accept_latest_on_prime = bool(process_latest_on_first)
         if _normalized(previous) != _normalized(self.router.configured_group):
             self._opened_group = ""
         if not self.running:
             self.running = True
             self._timer.start()
         if self.router.configured_group:
-            self._status(f"Uygulama içinde grup açılıyor: {self.router.configured_group}")
+            prefix = "Max aktif" if self.router.active else "Max dinleyici hazır"
+            self._status(f"{prefix} - uygulama içinde grup açılıyor: {self.router.configured_group}")
             self._open_group(self.router.configured_group)
         else:
-            self._status("Max hazır - açık sohbette #Max başla bekleniyor")
+            if self.router.active:
+                self._status("Max aktif - açık sohbet dinleniyor")
+            else:
+                self._status("Max hazır - açık sohbette #Max başla bekleniyor")
         self._schedule(350, self.poll_once)
         return True
 

@@ -1,4 +1,4 @@
-RE/MAX İlan Botu V0.39.0 - İlan Linki Kaynak Seçimi
+RE/MAX İlan Botu V0.39.1 - WhatsApp Komut Algılama Düzeltmesi
 
 ÇALIŞMA ŞEKLİ
 1. Uygulama içindeki WhatsApp Web panelinde oturum açın.
@@ -27,5 +27,12 @@ V0.39.0 YENİLİKLERİ
 - Normal ilan aramaları kaydedilen sitedeki ilanları kullanır.
 - #emlakjet, #sahibinden ve #myremax ile başlayan aramalar belirtilen sitenin linklerini getirir.
 - #danışmanlar komutu üç sitenin tamamındaki ilan adetlerini göstermeye devam eder.
+
+V0.39.1 DÜZELTMELERİ
+- Güncel WhatsApp Web görünümünde açık sohbet ve mesaj kutusu yeniden algılanır.
+- WhatsApp'ın gölge bileşenleri içindeki mesajlar da okunur.
+- Kullanıcının kendi gönderdiği komutlar ve diğer katılımcıların komutları birlikte işlenir.
+- BOTU BAŞLAT düğmesi cevap modunu hemen etkinleştirir; ayrıca #Max başla yazmak gerekmez.
+- Yanıt gönderme işlemi eski ve yeni WhatsApp mesaj kutusu yapılarıyla uyumludur.
 
 Hazır Windows ve macOS paketleri GitHub Actions bölümündeki son başarılı çalıştırmanın Artifacts alanındadır.

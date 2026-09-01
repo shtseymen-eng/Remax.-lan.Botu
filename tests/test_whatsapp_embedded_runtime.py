@@ -58,6 +58,56 @@ class RuntimeTests(unittest.TestCase):
         bot=EmbeddedWhatsAppBot(lambda _:"",page=page,schedule=lambda _ms,fn:fn())
         self.assertTrue(bot.running)
 
+    def test_user_start_activates_bot_immediately(self):
+        page=FakePage()
+        bot=EmbeddedWhatsAppBot(lambda _:"",page=page,schedule=lambda _ms,fn:fn())
+        self.assertFalse(bot.active)
+
+        bot.start("Max deneme")
+
+        self.assertTrue(bot.active)
+
+    def test_first_snapshot_after_user_start_answers_latest_command_once(self):
+        page=FakePage()
+        bot=EmbeddedWhatsAppBot(lambda text:f"Sonuç: {text}",page=page,schedule=lambda _ms,fn:fn())
+        bot.start("Max deneme")
+
+        first=bot.router.process(snapshot(
+            title="Max deneme",
+            messages=[
+                {"id":"old","text":"#eski komut"},
+                {"id":"fresh","text":"#izmit kiralık"},
+            ],
+        ))
+        repeated=bot.router.process(snapshot(
+            title="Max deneme",
+            messages=[{"id":"fresh","text":"#izmit kiralık"}],
+        ))
+
+        self.assertEqual(first.replies,["Max: Sonuç: #izmit kiralık"])
+        self.assertEqual(repeated.replies,[])
+        self.assertEqual(first.status,"Max aktif - Max deneme dinleniyor")
+
+    def test_saved_active_state_is_restored_without_replaying_history(self):
+        page=FakePage()
+        bot=EmbeddedWhatsAppBot(
+            lambda text:f"Sonuç: {text}",
+            page=page,
+            schedule=lambda _ms,fn:fn(),
+            initial_group="Max deneme",
+            start_active=True,
+        )
+
+        first=bot.router.process(snapshot(
+            title="Max deneme",
+            messages=[{"id":"old","text":"#eski komut"}],
+        ))
+
+        self.assertTrue(bot.active)
+        self.assertEqual(bot.router.configured_group,"Max deneme")
+        self.assertEqual(first.replies,[])
+        self.assertEqual(first.status,"Max aktif - Max deneme dinleniyor")
+
     def test_stop_keeps_reader_alive_for_future_max_start(self):
         page=FakePage()
         bot=EmbeddedWhatsAppBot(lambda _:"",page=page,schedule=lambda _ms,fn:fn())

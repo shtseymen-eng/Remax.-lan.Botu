@@ -93,7 +93,6 @@ class MessageRouter:
         self.seen = set()
         self._seen_order = deque()
         self.primed_chats = set()
-        self.accept_latest_on_prime = False
 
     def set_group(self, group: str):
         configured_group = " ".join(str(group or "").split())
@@ -107,7 +106,6 @@ class MessageRouter:
         self.seen.clear()
         self._seen_order.clear()
         self.primed_chats.clear()
-        self.accept_latest_on_prime = False
 
     def _remember(self, message_id: str):
         if not message_id or message_id in self.seen:
@@ -118,7 +116,7 @@ class MessageRouter:
             old = self._seen_order.popleft()
             self.seen.discard(old)
 
-    def process(self, snapshot: dict | None) -> RouteResult:
+    def process(self, snapshot: dict | None, prime_only: bool = False) -> RouteResult:
         result = RouteResult()
         if not isinstance(snapshot, dict):
             return result
@@ -142,35 +140,41 @@ class MessageRouter:
                 result.open_group = self.configured_group
                 return result
         elif self.locked_chat_id and chat_id != self.locked_chat_id:
-            if _normalized(self.locked_chat_title) != _normalized("Açık sohbet"):
-                result.open_group = self.locked_chat_title
-            return result
+            if identified and _normalized(title) == _normalized(self.locked_chat_title):
+                self.locked_chat_id = chat_id
+            else:
+                if _normalized(self.locked_chat_title) != _normalized("Açık sohbet"):
+                    result.open_group = self.locked_chat_title
+                return result
 
         messages = snapshot.get("messages") or []
+        chat_keys = {chat_id}
+        if self.configured_group or identified:
+            chat_keys.add(_normalized(title))
+
+        if prime_only:
+            for message in messages:
+                if isinstance(message, dict):
+                    self._remember(str(message.get("id") or "").strip())
+            self.primed_chats.update(chat_keys)
+            if not self.configured_group and not self.locked_chat_id:
+                self.locked_chat_id = chat_id
+                self.locked_chat_title = title
+            result.status = f"Max hazırlanıyor - {title} içindeki eski mesajlar atlandı"
+            return result
 
         # First sight of a chat only records history. This stops an old #Max command
         # from reactivating Max when the user changes conversations.
-        if chat_id not in self.primed_chats:
-            latest_id = ""
-            if self.active and self.accept_latest_on_prime:
-                for message in reversed(messages):
-                    if not isinstance(message, dict):
-                        continue
-                    latest_id = str(message.get("id") or "").strip()
-                    if latest_id:
-                        break
+        if self.primed_chats.isdisjoint(chat_keys):
             for message in messages:
                 message_id = str((message or {}).get("id") or "").strip()
-                if message_id != latest_id:
-                    self._remember(message_id)
-            self.primed_chats.add(chat_id)
-            self.accept_latest_on_prime = False
+                self._remember(message_id)
+            self.primed_chats.update(chat_keys)
             if self.active:
                 result.status = f"Max aktif - {title} dinleniyor"
             else:
                 result.status = f"Max dinleyici hazır - {title} içinde #Max başla yazın"
-            if not latest_id:
-                return result
+            return result
 
         for message in messages:
             if not isinstance(message, dict):
@@ -672,6 +676,7 @@ class EmbeddedWhatsAppBot(QObject):
         self._send_attempts = 0
         self._confirm_attempts = 0
         self._last_status = ""
+        self._activation_pending = False
         self._initial_group = " ".join(str(initial_group or "").split())
         self._start_active = bool(start_active)
         self._schedule = schedule or (
@@ -704,32 +709,28 @@ class EmbeddedWhatsAppBot(QObject):
             self.start(
                 self._initial_group,
                 activate=self._start_active,
-                process_latest_on_first=False,
             )
 
-    def start(
-        self,
-        group: str = "",
-        activate: bool = True,
-        process_latest_on_first: bool = True,
-    ):
+    def start(self, group: str = "", activate: bool = True):
         previous = self.router.configured_group
         self.router.set_group(group)
         if activate:
-            self.router.active = True
-            self.router.accept_latest_on_prime = bool(process_latest_on_first)
+            self.router.active = False
+            self._activation_pending = True
+        else:
+            self._activation_pending = False
         if _normalized(previous) != _normalized(self.router.configured_group):
             self._opened_group = ""
         if not self.running:
             self.running = True
             self._timer.start()
         if self.router.configured_group:
-            prefix = "Max aktif" if self.router.active else "Max dinleyici hazır"
+            prefix = "Max hazırlanıyor" if self._activation_pending else "Max dinleyici hazır"
             self._status(f"{prefix} - uygulama içinde grup açılıyor: {self.router.configured_group}")
             self._open_group(self.router.configured_group)
         else:
-            if self.router.active:
-                self._status("Max aktif - açık sohbet dinleniyor")
+            if self._activation_pending:
+                self._status("Max hazırlanıyor - açık sohbetteki eski mesajlar atlanıyor")
             else:
                 self._status("Max hazır - açık sohbette #Max başla bekleniyor")
         self._schedule(350, self.poll_once)
@@ -737,10 +738,12 @@ class EmbeddedWhatsAppBot(QObject):
 
     def stop(self):
         # Keep the lightweight reader alive so #Max başla can activate Max again.
+        self._activation_pending = False
         self.router.active = False
         self._status("Max pasif - tekrar başlatmak için sohbete #Max başla yazın")
 
     def set_group(self, group: str):
+        self._activation_pending = False
         previous = self.router.configured_group
         self.router.set_group(group)
         if _normalized(previous) != _normalized(self.router.configured_group):
@@ -754,6 +757,7 @@ class EmbeddedWhatsAppBot(QObject):
 
     def shutdown(self):
         self.running = False
+        self._activation_pending = False
         self.router.active = False
         self._timer.stop()
 
@@ -783,8 +787,51 @@ class EmbeddedWhatsAppBot(QObject):
                     != _normalized(self.router.configured_group)
                 ):
                     self._open_group(self.router.configured_group)
+                elif self._activation_pending:
+                    self._status("Max hazırlanıyor - WhatsApp'ta bir sohbet açın")
                 else:
                     self._status("Max dinleyici açık - WhatsApp'ta bir sohbet açın")
+                return
+
+            if self._activation_pending:
+                chat = snapshot.get("chat") or {}
+                raw_title = " ".join(str(chat.get("title") or "").split())
+                identified = bool(
+                    chat.get(
+                        "identified",
+                        raw_title
+                        and _normalized(raw_title) != _normalized("Açık sohbet"),
+                    )
+                )
+                raw_chat_id = _normalized(str(chat.get("id") or ""))
+                placeholder_ids = {
+                    "",
+                    "open-chat",
+                    _normalized("Açık sohbet"),
+                }
+                concrete_title = bool(
+                    identified
+                    and _normalized(raw_title) != _normalized("Açık sohbet")
+                )
+                stable_chat_id = raw_chat_id not in placeholder_ids
+                if not concrete_title and not stable_chat_id:
+                    self._status("Max hazırlanıyor - WhatsApp'ta bir sohbet açın")
+                    return
+
+                result = self.router.process(snapshot, prime_only=True)
+                if result.open_group:
+                    self._open_group(result.open_group, force=True)
+                    return
+
+                title = (
+                    self.router.configured_group
+                    or " ".join(str(chat.get("title") or "").split())
+                    or "Açık sohbet"
+                )
+                self._activation_pending = False
+                self.router.active = True
+                self._status(f"Max aktif - {title} dinleniyor")
+                self._schedule(350, self.poll_once)
                 return
 
             result = self.router.process(snapshot)

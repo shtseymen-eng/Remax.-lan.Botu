@@ -58,55 +58,144 @@ class RuntimeTests(unittest.TestCase):
         bot=EmbeddedWhatsAppBot(lambda _:"",page=page,schedule=lambda _ms,fn:fn())
         self.assertTrue(bot.running)
 
-    def test_user_start_activates_bot_immediately(self):
+    def test_user_start_activates_only_after_existing_messages_are_primed(self):
         page=FakePage()
         bot=EmbeddedWhatsAppBot(lambda _:"",page=page,schedule=lambda _ms,fn:fn())
         self.assertFalse(bot.active)
 
         bot.start("Max deneme")
+        self.assertFalse(bot.active)
+        bot._on_snapshot(snapshot(
+            title="Max deneme",
+            messages=[{"id":"old","text":"#izmit kiralık"}],
+        ))
 
         self.assertTrue(bot.active)
 
-    def test_first_snapshot_after_user_start_answers_latest_command_once(self):
+    def test_user_start_ignores_all_visible_commands_and_answers_only_later_commands(self):
         page=FakePage()
-        bot=EmbeddedWhatsAppBot(lambda text:f"Sonuç: {text}",page=page,schedule=lambda _ms,fn:fn())
+        handled=[]
+        bot=EmbeddedWhatsAppBot(
+            lambda text:handled.append(text) or f"Sonuç: {text}",
+            page=page,
+            schedule=lambda _ms,fn:fn(),
+        )
         bot.start("Max deneme")
 
-        first=bot.router.process(snapshot(
+        bot._on_snapshot(snapshot(
             title="Max deneme",
             messages=[
                 {"id":"old","text":"#eski komut"},
-                {"id":"fresh","text":"#izmit kiralık"},
+                {"id":"visible","text":"#izmit kiralık"},
+            ],
+        ))
+        after_start=bot.router.process(snapshot(
+            title="Max deneme",
+            messages=[
+                {"id":"old","text":"#eski komut"},
+                {"id":"visible","text":"#izmit kiralık"},
+                {"id":"new","text":"#emlakjet izmit kiralık"},
             ],
         ))
         repeated=bot.router.process(snapshot(
             title="Max deneme",
-            messages=[{"id":"fresh","text":"#izmit kiralık"}],
+            messages=[{"id":"new","text":"#emlakjet izmit kiralık"}],
         ))
 
-        self.assertEqual(first.replies,["Max: Sonuç: #izmit kiralık"])
+        self.assertEqual(handled,["#emlakjet izmit kiralık"])
+        self.assertEqual(after_start.replies,["Max: Sonuç: #emlakjet izmit kiralık"])
         self.assertEqual(repeated.replies,[])
-        self.assertEqual(first.status,"Max aktif - Max deneme dinleniyor")
 
     def test_saved_active_state_is_restored_without_replaying_history(self):
         page=FakePage()
+        handled=[]
         bot=EmbeddedWhatsAppBot(
-            lambda text:f"Sonuç: {text}",
+            lambda text:handled.append(text) or f"Sonuç: {text}",
             page=page,
             schedule=lambda _ms,fn:fn(),
             initial_group="Max deneme",
             start_active=True,
         )
 
-        first=bot.router.process(snapshot(
+        self.assertFalse(bot.active)
+        bot._on_snapshot(snapshot(
             title="Max deneme",
             messages=[{"id":"old","text":"#eski komut"}],
         ))
 
         self.assertTrue(bot.active)
         self.assertEqual(bot.router.configured_group,"Max deneme")
-        self.assertEqual(first.replies,[])
-        self.assertEqual(first.status,"Max aktif - Max deneme dinleniyor")
+        self.assertEqual(handled,[])
+
+    def test_placeholder_open_chat_does_not_complete_activation(self):
+        page=FakePage()
+        bot=EmbeddedWhatsAppBot(
+            lambda text:f"Sonuç: {text}",
+            page=page,
+            schedule=lambda _ms,fn:fn(),
+        )
+        bot.start("")
+
+        bot._on_snapshot({
+            "chat":{"id":"açık sohbet","title":"Açık sohbet","identified":False},
+            "messages":[],
+        })
+        self.assertFalse(bot.active)
+
+        bot._on_snapshot({
+            "chat":{"id":"group-1","title":"Max deneme","identified":True},
+            "messages":[{"id":"old","text":"#eski komut"}],
+        })
+        result=bot.router.process({
+            "chat":{"id":"group-1","title":"Max deneme","identified":True},
+            "messages":[
+                {"id":"old","text":"#eski komut"},
+                {"id":"new","text":"#izmit kiralık"},
+            ],
+        })
+
+        self.assertTrue(bot.active)
+        self.assertEqual(result.replies,["Max: Sonuç: #izmit kiralık"])
+
+    def test_concrete_title_baseline_survives_later_whatsapp_chat_token(self):
+        page=FakePage()
+        bot=EmbeddedWhatsAppBot(
+            lambda text:f"Sonuç: {text}",
+            page=page,
+            schedule=lambda _ms,fn:fn(),
+        )
+        bot.start("Max deneme")
+        bot._on_snapshot({
+            "chat":{"id":"max deneme","title":"Max deneme","identified":True},
+            "messages":[],
+        })
+
+        result=bot.router.process({
+            "chat":{"id":"120363-token","title":"Max deneme","identified":True},
+            "messages":[{"id":"new","text":"#izmit kiralık"}],
+        })
+
+        self.assertEqual(result.replies,["Max: Sonuç: #izmit kiralık"])
+
+    def test_dynamic_chat_title_baseline_survives_later_whatsapp_chat_token(self):
+        page=FakePage()
+        bot=EmbeddedWhatsAppBot(
+            lambda text:f"Sonuç: {text}",
+            page=page,
+            schedule=lambda _ms,fn:fn(),
+        )
+        bot.start("")
+        bot._on_snapshot({
+            "chat":{"id":"max deneme","title":"Max deneme","identified":True},
+            "messages":[],
+        })
+
+        result=bot.router.process({
+            "chat":{"id":"120363-token","title":"Max deneme","identified":True},
+            "messages":[{"id":"new","text":"#izmit kiralık"}],
+        })
+
+        self.assertEqual(result.replies,["Max: Sonuç: #izmit kiralık"])
 
     def test_stop_keeps_reader_alive_for_future_max_start(self):
         page=FakePage()

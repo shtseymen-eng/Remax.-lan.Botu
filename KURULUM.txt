@@ -1,4 +1,4 @@
-RE/MAX İlan Botu V0.39.1 - WhatsApp Komut Algılama Düzeltmesi
+RE/MAX İlan Botu V0.39.2 - Eski Mesajları Atlama Düzeltmesi
 
 ÇALIŞMA ŞEKLİ
 1. Uygulama içindeki WhatsApp Web panelinde oturum açın.
@@ -32,7 +32,13 @@ V0.39.1 DÜZELTMELERİ
 - Güncel WhatsApp Web görünümünde açık sohbet ve mesaj kutusu yeniden algılanır.
 - WhatsApp'ın gölge bileşenleri içindeki mesajlar da okunur.
 - Kullanıcının kendi gönderdiği komutlar ve diğer katılımcıların komutları birlikte işlenir.
-- BOTU BAŞLAT düğmesi cevap modunu hemen etkinleştirir; ayrıca #Max başla yazmak gerekmez.
+- BOTU BAŞLAT düğmesi cevap modunu etkinleştirir; ayrıca #Max başla yazmak gerekmez.
 - Yanıt gönderme işlemi eski ve yeni WhatsApp mesaj kutusu yapılarıyla uyumludur.
+
+V0.39.2 DÜZELTMELERİ
+- BOTU BAŞLAT seçildiğinde açık sohbette görünen bütün eski komutlar sessizce atlanır.
+- Bot, mevcut mesajların başlangıç taraması tamamlandıktan sonra aktif olur.
+- Yalnızca aktif durumuna geçildikten sonra gelen yeni komutlar cevaplanır.
+- Uygulama yeniden açıldığında eski konuşmalar tekrar çalıştırılmaz.
 
 Hazır Windows ve macOS paketleri GitHub Actions bölümündeki son başarılı çalıştırmanın Artifacts alanındadır.

@@ -14,6 +14,9 @@ def test_help():
     assert '#danışmanlar#' in command_help()
     assert '#izmit kiralık 55 bin#' in command_help()
     assert '#izmit satılık daire 4 milyon#' in command_help()
+    assert '#emlakjet izmit kiralık' in command_help()
+    assert '#sahibinden izmit satılık' in command_help()
+    assert '#myremax yahya kaptan kiralık' in command_help()
 
 def test_ignore_normal_chat():
     assert command_response(items(),'merhaba') is None
@@ -131,3 +134,81 @@ def test_grouped_response_uses_same_placeholder_for_invalid_advisor():
     assert 'Belirtilmemiş: 1 ilan' in response
     assert 'Danışman belirtilmemiş' not in response
     assert 'İlan Numarası' not in response
+
+
+def test_saved_link_source_filters_normal_link_commands():
+    response=command_response(
+        items(),
+        '#yahya kaptan kiralık 3+1 link',
+        link_source='Emlakjet',
+    )
+
+    assert 'https://x/2' in response
+    assert 'https://x/1' not in response
+
+
+def test_saved_link_source_filters_normal_summary_commands():
+    response=command_response(
+        items(),
+        '#yahya kaptan kiralık 3+1',
+        link_source='Emlakjet',
+    )
+
+    assert '1 uygun ilan bulundu' in response
+    assert 'Mert Öztürk: 1 ilan' in response
+    assert 'Ayşe Şen' not in response
+
+
+def test_command_source_prefix_overrides_saved_source_and_returns_links():
+    response=command_response(
+        items(),
+        '#emlakjet izmit kiralık',
+        link_source='Sahibinden',
+    )
+
+    assert 'https://x/2' in response
+    assert 'https://x/1' not in response
+    assert 'Mert Öztürk' in response
+
+
+def test_all_command_source_prefixes_are_parsed_as_link_searches():
+    examples={
+        '#emlakjet izmit kiralık':('Emlakjet','izmit kiralık'),
+        '#sahibinden izmit satılık':('Sahibinden','izmit satılık'),
+        '#myremax yahya kaptan kiralık':('MyRE/MAX','yahya kaptan kiralık'),
+    }
+
+    for text,(source,query) in examples.items():
+        command=parse_command(text)
+        assert command['type']=='search'
+        assert command['source']==source
+        assert command['query']==query
+        assert command['links'] is True
+
+
+def test_selected_source_never_falls_back_to_another_site():
+    response=command_response(
+        items(),
+        '#yahya kaptan kiralık 3+1 link',
+        link_source='Sahibinden',
+    )
+
+    assert response=='Sahibinden listesinde aramanıza uygun ilan bulunamadı.'
+
+
+def test_advisors_command_always_counts_all_sites():
+    response=command_response(items(),'#danışmanlar',link_source='Emlakjet')
+
+    assert 'MyRE/MAX: 1 | Emlakjet: 0 | Sahibinden: 1' in response
+    assert 'Toplam ilan: 4' in response
+
+
+def test_invalid_saved_source_uses_safe_myremax_default():
+    response=command_response(
+        items(),
+        '#yahya kaptan kiralık 3+1 link',
+        link_source='eski-gecersiz-deger',
+    )
+
+    assert 'https://x/1' in response
+    assert 'https://x/2' not in response

@@ -1,4 +1,4 @@
-RE/MAX İlan Botu V0.38.1 - Tarama ve WhatsApp Düzeltmeleri
+RE/MAX İlan Botu V0.39.0 - İlan Linki Kaynak Seçimi
 
 ÇALIŞMA ŞEKLİ
 1. Uygulama içindeki WhatsApp Web panelinde oturum açın.
@@ -7,6 +7,7 @@ RE/MAX İlan Botu V0.38.1 - Tarama ve WhatsApp Düzeltmeleri
 4. Ayarlarda grup adı yazıp kaydederseniz uygulama o grubu kendi panelinde açar.
 5. #?, #danışmanlar ve ilan arama komutlarını kullanabilirsiniz.
 6. #Max durdur cevap modunu kapatır; #Max başla yeniden açar.
+7. Ayarlardaki İlan linki kaynağı seçimi normal ilan komutlarının kullanacağı siteyi belirler.
 
 V0.38 YENİLİKLERİ
 - MyRE/MAX, Emlakjet ve Sahibinden kaynakları ayrı ayrı taranır.
@@ -20,5 +21,11 @@ V0.38.1 DÜZELTMELERİ
 - Kullanıcının kendi yazdığı #Max komutları da okunup cevaplanır.
 - Emlakjet ilanlarının ikinci sayfası taranır.
 - Danışman adı alanına İlan No, Portföy No ve benzeri sayfa metinleri yazılmaz.
+
+V0.39.0 YENİLİKLERİ
+- Ayarlardan Sahibinden, Emlakjet veya MyRE/MAX ilan kaynağı seçilip kaydedilebilir.
+- Normal ilan aramaları kaydedilen sitedeki ilanları kullanır.
+- #emlakjet, #sahibinden ve #myremax ile başlayan aramalar belirtilen sitenin linklerini getirir.
+- #danışmanlar komutu üç sitenin tamamındaki ilan adetlerini göstermeye devam eder.
 
 Hazır Windows ve macOS paketleri GitHub Actions bölümündeki son başarılı çalıştırmanın Artifacts alanındadır.

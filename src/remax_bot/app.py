@@ -10,7 +10,7 @@ from PySide6.QtWebEngineCore import QWebEngineProfile,QWebEnginePage
 
 from .core import DB,Listing,source_label,split_listings_by_site
 from .playwright_scanner import PlaywrightScanner
-from .importer import read_list_file,command_response,command_help,advisor_names,advisor_display_name,filter_listings,price_number
+from .importer import LINK_SOURCES,read_list_file,command_response,command_help,advisor_names,advisor_display_name,filter_listings,price_number
 from .whatsapp_webengine import EmbeddedWhatsAppBot
 from . import __version__
 
@@ -84,7 +84,7 @@ class Main(QMainWindow):
         self.refresh()
 
     def _load_settings(self):
-        base={'group':'','sound':True,'bot':False,'days':7}
+        base={'group':'','sound':True,'bot':False,'days':7,'link_source':'MyRE/MAX'}
         try:
             if self.cfg.exists():
                 base.update(json.loads(self.cfg.read_text(encoding='utf-8')))
@@ -231,7 +231,9 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.stack.addWidget(p)
 
         self.wabot=EmbeddedWhatsAppBot(
-            lambda text:command_response(self.db.all(),text),
+            lambda text:command_response(
+                self.db.all(),text,link_source=self.settings.get('link_source','MyRE/MAX')
+            ),
             page=self.wa.page()
         )
         self.wabot.status.connect(self._wa_status)
@@ -474,7 +476,12 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.days.setRange(1,60)
         self.days.setValue(self.settings.get('days',7))
         self.days.setSuffix(' gün')
+        self.link_source=QComboBox()
+        self.link_source.addItems(list(LINK_SOURCES))
+        selected_source=self.settings.get('link_source','MyRE/MAX')
+        self.link_source.setCurrentText(selected_source if selected_source in LINK_SOURCES else 'MyRE/MAX')
         f.addRow('WhatsApp grup/sohbet adı:',self.group)
+        f.addRow('İlan linki kaynağı:',self.link_source)
         f.addRow('Bildirim:',self.sound)
         f.addRow('Güncelleme hatırlatması:',self.days)
         l.addLayout(f)
@@ -601,7 +608,10 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.wa_status_chip.setText(msg)
 
     def quick_test(self):
-        out=command_response(self.db.all(),self.quick_cmd.text().strip())
+        out=command_response(
+            self.db.all(),self.quick_cmd.text().strip(),
+            link_source=self.settings.get('link_source','MyRE/MAX')
+        )
         self.quick_result.setPlainText(out or 'Bot bu mesajı görmezden gelir.')
         self.quick_result.setVisible(True)
         self.quick_toggle.setText('▲ SONUCU GİZLE')
@@ -614,6 +624,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
     def save_settings(self):
         self.settings.update(
             group=self.group.text().strip(),
+            link_source=self.link_source.currentText(),
             sound=self.sound.isChecked(),
             days=self.days.value()
         )

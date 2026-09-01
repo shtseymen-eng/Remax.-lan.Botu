@@ -48,3 +48,17 @@ def test_settings_show_group_but_bot_test_has_its_own_page():
     settings = APP[APP.index("    def _settings(self):"):APP.index("    def refresh(self")]
     assert "self.commandlist.setPlainText(command_help())" in bot_test
     assert "Bot Komut Testi" not in settings
+
+
+def test_saved_link_source_is_used_by_whatsapp_and_bot_test():
+    home = APP[APP.index("    def _home(self):"):APP.index("    def _new_listing_table(self):")]
+    bot_test = APP[APP.index("    def quick_test(self):"):APP.index("    def toggle_quick_result(self):")]
+    settings = APP[APP.index("    def _settings(self):"):APP.index("    def refresh(self")]
+    save = APP[APP.index("    def save_settings(self):"):APP.index("    def open_link(self,table,row):")]
+
+    assert "'link_source':'MyRE/MAX'" in APP
+    assert "İlan linki kaynağı:" in settings
+    assert "self.link_source.addItems(list(LINK_SOURCES))" in settings
+    assert "link_source=self.settings.get('link_source','MyRE/MAX')" in home
+    assert "link_source=self.settings.get('link_source','MyRE/MAX')" in bot_test
+    assert "link_source=self.link_source.currentText()" in save

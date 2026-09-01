@@ -24,6 +24,13 @@ NOISE_ADVISOR_TOKENS={
     "fiyat","aciklama","m2","metrekare","ilan no","ilan numarasi",
     "portfoy no","portfoy numarasi","yetki belgesi","tum ilanlari"
 }
+LINK_SOURCES=("Sahibinden","Emlakjet","MyRE/MAX")
+COMMAND_SOURCE_PREFIXES={
+    "sahibinden":"Sahibinden",
+    "emlakjet":"Emlakjet",
+    "myremax":"MyRE/MAX",
+    "myre/max":"MyRE/MAX",
+}
 def _h(s): return norm(str(s or "")).replace("²","2")
 def _map_headers(headers):
     out={}; nh={_h(h):h for h in headers if h is not None}
@@ -119,6 +126,18 @@ Uygun ilanların linklerini danışman adıyla gönderir.
 #danışman ayşe
 Danışman adına göre ilanları bulur.
 
+#emlakjet izmit kiralık
+Yalnızca Emlakjet listesindeki uygun ilanların linklerini gönderir.
+
+#sahibinden izmit satılık
+Yalnızca Sahibinden listesindeki uygun ilanların linklerini gönderir.
+
+#myremax yahya kaptan kiralık
+Yalnızca MyRE/MAX listesindeki uygun ilanların linklerini gönderir.
+
+Komutta site adı yoksa Ayarlar bölümünde kayıtlı ilan linki kaynağı kullanılır.
+#danışmanlar komutu her zaman üç sitenin tamamını sayar.
+
 Komutun yalnızca başında # olması yeterlidir.
 Eski #komut# biçimi de desteklenir.
 
@@ -140,10 +159,14 @@ def parse_command(text):
     if body=="?":return {"type":"help"}
     if not body:return {"type":"ignore"}
     if norm(body)=="danismanlar":return {"type":"advisors"}
-    link=bool(re.search(r"\blink\b",norm(body))); body=re.sub(r"(?i)\blink\b"," ",body).strip()
+    parts=body.split(maxsplit=1)
+    source=COMMAND_SOURCE_PREFIXES.get(norm(parts[0]))
+    if source:
+        body=parts[1].strip() if len(parts)>1 else ""
+    link=bool(source) or bool(re.search(r"\blink\b",norm(body))); body=re.sub(r"(?i)\blink\b"," ",body).strip()
     m=re.match(r"(?i)danışman\s+(.+)$",body)
     if not m:m=re.match(r"(?i)danisman\s+(.+)$",norm(body))
-    if m:return {"type":"search","query":m.group(1).strip(),"links":link,"advisor_only":True,"target_price":None}
+    if m:return {"type":"search","query":m.group(1).strip(),"links":link,"advisor_only":True,"target_price":None,"source":source}
     target=None; normalized=norm(body)
     suffix_matches=list(re.finditer(r"(?<![\d+])(\d+(?:[.,]\d+)?)\s*(bin|k|milyon|mn)(?:\s*(?:tl|₺))?(?!\w)",normalized))
     if suffix_matches:
@@ -156,8 +179,8 @@ def parse_command(text):
         if direct:
             raw=direct[-1].group(0); target=int(re.sub(r"[^0-9]","",raw))
             body=(body[:direct[-1].start()]+" "+body[direct[-1].end():]).strip()
-    return {"type":"search","query":body,"links":link,"target_price":target}
-def command_response(items,text,limit=12):
+    return {"type":"search","query":body,"links":link,"target_price":target,"source":source}
+def command_response(items,text,limit=12,link_source=None):
     from .core import search
     cmd=parse_command(text)
     if cmd["type"]=="ignore":return None
@@ -199,11 +222,20 @@ def command_response(items,text,limit=12):
             lines.append("")
         lines += ["",f"Toplam ilan: {len(unique_rows)}",f"Toplam danışman: {len(groups)}"]
         return "\n".join(lines)
-    matches=search(items,cmd.get("query","")); target=cmd.get("target_price")
+    configured_source=(
+        link_source if link_source in LINK_SOURCES
+        else ("MyRE/MAX" if link_source is not None else None)
+    )
+    selected_source=cmd.get("source") or configured_source
+    searchable=list(items)
+    if selected_source:
+        searchable=[x for x in searchable if source_site(x.source_url,x.url)==selected_source]
+    matches=search(searchable,cmd.get("query","")); target=cmd.get("target_price")
     if target is not None:
         priced=[(price_number(x.price),x) for x in matches]; priced=[p for p in priced if p[0] is not None and p[0]<=target]
         matches=[x for _,x in sorted(priced,key=lambda p:p[0],reverse=True)]
     if not matches:
+        if selected_source:return f"{selected_source} listesinde aramanıza uygun ilan bulunamadı."
         if target is not None:return f"{target:,.0f} TL ve altında aramanıza uygun ilan bulunamadı.".replace(",",".")
         return "Aramanıza uygun ilan bulunamadı."
     if cmd.get("links") or target is not None:

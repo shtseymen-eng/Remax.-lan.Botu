@@ -5,11 +5,13 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "src/remax_bot/app.py").read_text(encoding="utf-8")
 
 
-def test_home_uses_visible_whatsapp_panel_for_the_bot():
+def test_home_uses_a_persistent_external_chrome_whatsapp_session():
     home = APP[APP.index("    def _home(self):"):APP.index("    def _new_listing_table(self):")]
     assert "WhatsApp Web" in home
-    assert "Max bu paneli doğrudan kullanır" in home
-    assert "gerçek Chrome WhatsApp" not in home
+    assert "ayrı Google Chrome penceresinde" in home
+    assert "whatsapp-chrome-profile" in home
+    assert "ExternalWhatsAppBot" in home
+    assert "QWebEngineView" not in home
     assert "QTableWidget" not in home
     assert "TARA / GÜNCELLE" not in home
     assert "KOMUTU TEST ET" not in home

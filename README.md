@@ -9,7 +9,7 @@ Windows ve macOS üzerinde çalışan ilan yönetimi ve WhatsApp yanıt uygulama
 - `#danışmanlar` komutunda her danışmanın üç sitedeki ilan adetlerini ayrı ayrı gösterir.
 - Excel/CSV dosyalarından veya manuel girişten ilan ekler.
 - İlanları danışman, konum, tür ve fiyata göre filtreler.
-- Uygulamanın içindeki WhatsApp Web panelinden mesajları okur ve yanıtlar.
+- Kalıcı oturum profiliyle ayrı bir Google Chrome penceresindeki WhatsApp Web mesajlarını okur ve yanıtlar.
 - Ayarlardaki grup/sohbet adını otomatik bulup açar.
 - Aynı mesajı yalnızca bir kez işler ve yanıtı gerçek Gönder düğmesiyle yollar.
 - WhatsApp ve tarayıcı profillerini bilgisayarda kalıcı olarak saklar.
@@ -38,18 +38,18 @@ pip install -e ".[dev]"
 python -m remax_bot.app
 ```
 
-İlk WhatsApp kullanımında uygulamanın içindeki WhatsApp panelinde görünen QR kodunu okutun. Oturum sonraki açılışlarda korunur.
+İlk WhatsApp kullanımında otomatik açılan Google Chrome penceresindeki QR kodunu okutun. Bu pencerenin oturumu sonraki açılışlarda korunur.
 
 ## Botu kullanma
 
-1. Sabit bir grup isterseniz **Ayarlar** bölümüne WhatsApp grup/sohbet adını eksiksiz yazıp kaydedin; panel otomatik olarak bu gruba geçer.
+1. Sabit bir grup isterseniz **Ayarlar** bölümüne WhatsApp grup/sohbet adını eksiksiz yazıp kaydedin; Chrome otomatik olarak bu gruba geçer.
 2. **BOTU BAŞLAT** düğmesine basın.
-3. Max uygulamanın içindeki WhatsApp panelinde belirtilen sohbeti bulur.
+3. Max, ayrı Google Chrome penceresindeki WhatsApp Web'de belirtilen sohbeti bulur.
 4. Durum satırında grubun açıldığı görüldükten sonra sohbete `#Max başla` veya `#Max başlat` yazın.
 5. `#?` ile komut yardımını veya örneğin `#izmit kiralık 3+1#` sorgusunu gönderin.
 6. `#Max durdur` ile cevap modunu kapatın.
 
-Komutları WhatsApp'a göndermeden denemek için soldaki **Bot Testi** sayfasını kullanabilirsiniz. Ana Sayfa yalnızca uygulamaya gömülü WhatsApp Web panelini gösterir.
+Komutları WhatsApp'a göndermeden denemek için soldaki **Bot Testi** sayfasını kullanabilirsiniz. Ana Sayfa WhatsApp bağlantı durumunu ve Chrome penceresini öne getiren düğmeyi gösterir.
 
 ## İlan kaynaklarını güncelleme
 

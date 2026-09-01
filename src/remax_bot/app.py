@@ -11,7 +11,7 @@ from PySide6.QtWebEngineCore import QWebEngineProfile,QWebEnginePage
 from .core import DB,Listing,source_label,split_listings_by_site
 from .playwright_scanner import PlaywrightScanner
 from .importer import LINK_SOURCES,read_list_file,command_response,command_help,advisor_names,advisor_display_name,filter_listings,price_number
-from .whatsapp_webengine import EmbeddedWhatsAppBot
+from .whatsapp_playwright import ExternalWhatsAppBot
 from . import __version__
 
 BLUE='#0B4DB8';NAVY='#062D69';RED='#E31837';GREEN='#13A84A'
@@ -71,13 +71,6 @@ class Main(QMainWindow):
         self.profile.setPersistentStoragePath(str(d/'web-profile'))
         self.profile.setCachePath(str(d/'web-cache'))
         self.profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
-
-        self.wa_profile=QWebEngineProfile('RemaxWhatsApp',self)
-        self.wa_profile.setPersistentStoragePath(str(d/'whatsapp-profile'))
-        self.wa_profile.setCachePath(str(d/'whatsapp-cache'))
-        self.wa_profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.ForcePersistentCookies)
-        self.wa_profile.setHttpAcceptLanguage('tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7')
-        self.wa_profile.setHttpUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36')
 
         self._build()
         self._style()
@@ -217,28 +210,43 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         wt.setStyleSheet('font-size:18px;font-weight:900')
         wh.addWidget(wt)
         wh.addStretch()
-        info=QLabel('Max bu paneli doğrudan kullanır; ayrı Chrome penceresi açılmaz.')
+        info=QLabel('Max, WhatsApp\'ı ayrı Google Chrome penceresinde güvenilir biçimde okur.')
         info.setStyleSheet(f'color:{MUTED};font-size:11px')
         wh.addWidget(info)
         wal.addLayout(wh)
 
-        self.wa=QWebEngineView()
-        self.wa.setPage(QWebEnginePage(self.wa_profile,self.wa))
-        self.wa.setUrl(QUrl('https://web.whatsapp.com/'))
-        wal.addWidget(self.wa,1)
+        chrome_info=QLabel(
+            'Google Chrome otomatik açılır. İlk kullanımda QR kodunu bir kez okutun; '
+            'oturum daha sonraki açılışlarda korunur. Chrome penceresinde hedef sohbeti '
+            'açık bırakabilirsiniz. Max hem sizin hem de diğer grup üyelerinin yeni '
+            '# komutlarını okuyup aynı sohbette yanıtlar.'
+        )
+        chrome_info.setWordWrap(True)
+        chrome_info.setAlignment(Qt.AlignCenter)
+        chrome_info.setStyleSheet(
+            f'font-size:16px;font-weight:700;color:{TEXT};padding:45px;'
+            f'background:{BG};border:1px solid {BORDER};border-radius:12px'
+        )
+        wal.addWidget(chrome_info,1)
+
+        show_chrome=QPushButton('WHATSAPP CHROME PENCERESİNİ GÖSTER')
+        show_chrome.setObjectName('green')
+        wal.addWidget(show_chrome)
 
         l.addWidget(wa_card,1)
         self.stack.addWidget(p)
 
-        self.wabot=EmbeddedWhatsAppBot(
+        self.wabot=ExternalWhatsAppBot(
             lambda text:command_response(
                 self.db.all(),text,link_source=self.settings.get('link_source','MyRE/MAX')
             ),
-            page=self.wa.page(),
+            profile_dir=app_data()/'whatsapp-chrome-profile',
             initial_group=self.settings.get('group',''),
             start_active=bool(self.settings.get('bot')),
         )
         self.wabot.status.connect(self._wa_status)
+        show_chrome.clicked.connect(self.wabot.show_browser)
+        QApplication.instance().aboutToQuit.connect(self.wabot.shutdown)
 
     def _new_listing_table(self):
         table=QTableWidget(0,11)

@@ -1,10 +1,10 @@
-RE/MAX İlan Botu V0.39.2 - Eski Mesajları Atlama Düzeltmesi
+RE/MAX İlan Botu V0.40.0 - Harici Google Chrome WhatsApp Okuyucusu
 
 ÇALIŞMA ŞEKLİ
-1. Uygulama içindeki WhatsApp Web panelinde oturum açın.
+1. Uygulamanın otomatik açtığı ayrı Google Chrome penceresinde WhatsApp Web oturumu açın. İlk kullanımda QR kodunu okutun.
 2. Ayarlarda grup adı boşsa istediğiniz sohbeti açıp #Max başla yazın.
 3. Max komutun yazıldığı sohbete kilitlenir ve yanıtları oraya gönderir.
-4. Ayarlarda grup adı yazıp kaydederseniz uygulama o grubu kendi panelinde açar.
+4. Ayarlarda grup adı yazıp kaydederseniz uygulama o grubu Chrome penceresinde açar.
 5. #?, #danışmanlar ve ilan arama komutlarını kullanabilirsiniz.
 6. #Max durdur cevap modunu kapatır; #Max başla yeniden açar.
 7. Ayarlardaki İlan linki kaynağı seçimi normal ilan komutlarının kullanacağı siteyi belirler.
@@ -40,5 +40,13 @@ V0.39.2 DÜZELTMELERİ
 - Bot, mevcut mesajların başlangıç taraması tamamlandıktan sonra aktif olur.
 - Yalnızca aktif durumuna geçildikten sonra gelen yeni komutlar cevaplanır.
 - Uygulama yeniden açıldığında eski konuşmalar tekrar çalıştırılmaz.
+
+V0.40.0 YENİLİKLERİ
+- WhatsApp okuyucusu gömülü panel yerine ayrı ve görünür Google Chrome penceresinde çalışır.
+- WhatsApp oturumu özel, kalıcı Chrome profilinde saklanır.
+- Eski mesajlar başlangıçta atlanır; yalnızca etkinleştirmeden sonra gelen yeni komutlar işlenir.
+- Kullanıcının kendi gönderdiği komutlar da okunup aynı sohbette yanıtlanır.
+- Yanıt metni eski taslağın yerine yazılır ve gerçek Enter tuşuyla gönderilir.
+- Geçici gönderim hatalarında yanıt kaybolmaz; sonraki kontrolde yeniden denenir.
 
 Hazır Windows ve macOS paketleri GitHub Actions bölümündeki son başarılı çalıştırmanın Artifacts alanındadır.

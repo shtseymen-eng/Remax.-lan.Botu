@@ -6,6 +6,7 @@ import tomllib
 from pathlib import Path
 
 from remax_bot.whatsapp_webengine import EmbeddedWhatsAppBot, MAX_INTRO, MessageRouter
+from remax_bot.whatsapp_playwright import EXTERNAL_SNAPSHOT_JS
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -355,12 +356,13 @@ def test_application_and_package_versions_match():
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     package = (ROOT / "src/remax_bot/__init__.py").read_text(encoding="utf-8")
 
-    assert project["project"]["version"] == "0.39.2"
-    assert '__version__="0.39.2"' in package
+    assert project["project"]["version"] == "0.40.0"
+    assert '__version__="0.40.0"' in package
 
 
 def test_all_embedded_browser_scripts_are_valid_javascript():
     scripts = [
+        EXTERNAL_SNAPSHOT_JS,
         EmbeddedWhatsAppBot.SNAPSHOT_JS,
         EmbeddedWhatsAppBot.SEARCH_GROUP_JS.replace("__GROUP_JSON__", '"Max deneme"'),
         EmbeddedWhatsAppBot.OPEN_GROUP_JS.replace("__GROUP_JSON__", '"Max deneme"'),

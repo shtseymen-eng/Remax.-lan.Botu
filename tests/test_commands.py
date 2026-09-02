@@ -17,6 +17,8 @@ def test_help():
     assert '#emlakjet izmit kiralık' in command_help()
     assert '#sahibinden izmit satılık' in command_help()
     assert '#myremax yahya kaptan kiralık' in command_help()
+    assert '#izmit kiralık dükkan-ofis' in command_help()
+    assert 'İlan aramalarında link kelimesi yazmanız gerekmez' in command_help()
 
 def test_ignore_normal_chat():
     assert command_response(items(),'merhaba') is None
@@ -24,6 +26,13 @@ def test_ignore_normal_chat():
 def test_summary():
     r=command_response(items(),'#yahya kaptan kiralık 3+1#')
     assert '2 uygun' in r and 'Ayşe Şen' in r and 'Mert Öztürk' in r
+
+
+def test_normal_search_returns_listing_links_without_requiring_the_link_word():
+    response=command_response(items(),'#yahya kaptan kiralık 3+1')
+
+    assert 'https://x/1' in response
+    assert 'https://x/2' in response
 
 def test_links():
     r=command_response(items(),'#yahya kaptan kiralık 3+1 link#')
@@ -42,15 +51,15 @@ def test_advisors_command_lists_counts_and_totals_with_turkish_chars():
     assert 'Toplam ilan: 4' in r
     assert 'Toplam danışman: 3' in r
 
-def test_advisors_command_merges_short_and_full_middle_name_variants():
+def test_advisors_command_keeps_unconfigured_middle_name_variants_separate():
     rows=[
         Listing('1','A','https://x/1','Hatice Davarcı',source_url='https://www.emlakjet.com/emlak-ofisleri/remax-carsi-1662566'),
         Listing('2','B','https://x/2','HATİCE AKPINAR DAVARCI',source_url='https://remax.com.tr/tr/ofis/detay/carsi'),
     ]
     r=command_response(rows,'#danışmanlar')
-    assert 'Hatice Davarcı — Toplam 2 ilan' in r
-    assert 'MyRE/MAX: 1 | Emlakjet: 1 | Sahibinden: 0' in r
-    assert 'Toplam danışman: 1' in r
+    assert 'Hatice Davarcı — Toplam 1 ilan' in r
+    assert 'HATİCE AKPINAR DAVARCI — Toplam 1 ilan' in r
+    assert 'Toplam danışman: 2' in r
 
 def test_advisors_command_deduplicates_within_site_but_not_across_sites():
     rows=[
@@ -120,7 +129,7 @@ def test_link_response_never_displays_listing_label_as_advisor():
     assert 'Portföy No' not in response
 
 
-def test_grouped_response_uses_same_placeholder_for_invalid_advisor():
+def test_automatic_link_response_uses_same_placeholder_for_invalid_advisor():
     rows=[
         Listing(
             '1','İzmit Satılık Daire','https://x/1','İlan Numarası','',
@@ -131,7 +140,7 @@ def test_grouped_response_uses_same_placeholder_for_invalid_advisor():
 
     response=command_response(rows,'#izmit satılık')
 
-    assert 'Belirtilmemiş: 1 ilan' in response
+    assert 'Danışman: Belirtilmemiş' in response
     assert 'Danışman belirtilmemiş' not in response
     assert 'İlan Numarası' not in response
 
@@ -147,7 +156,7 @@ def test_saved_link_source_filters_normal_link_commands():
     assert 'https://x/1' not in response
 
 
-def test_saved_link_source_filters_normal_summary_commands():
+def test_saved_link_source_filters_normal_commands_and_returns_the_link():
     response=command_response(
         items(),
         '#yahya kaptan kiralık 3+1',
@@ -155,7 +164,8 @@ def test_saved_link_source_filters_normal_summary_commands():
     )
 
     assert '1 uygun ilan bulundu' in response
-    assert 'Mert Öztürk: 1 ilan' in response
+    assert 'Danışman: Mert Öztürk' in response
+    assert 'https://x/2' in response
     assert 'Ayşe Şen' not in response
 
 

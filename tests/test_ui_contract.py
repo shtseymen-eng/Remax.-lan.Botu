@@ -37,6 +37,15 @@ def test_navigation_and_listing_tools_remain_available():
     assert "EXCEL / CSV YÜKLE" in listings
 
 
+def test_listing_editor_forgets_a_hidden_table_when_the_site_tab_changes():
+    listings = APP[APP.index("    def _listings(self):"):APP.index("    def _data(self):")]
+    edit_logic = APP[APP.index("    def edit_selected_listing(self):"):APP.index("    def manual_add(self):")]
+
+    assert "self.listing_tabs.currentChanged.connect(self._listing_tab_changed)" in listings
+    assert "def _listing_tab_changed(self,_index):" in edit_logic
+    assert "self._last_listing_table=None" in edit_logic
+
+
 def test_command_test_result_can_be_collapsed():
     assert "self.quick_result.setMaximumHeight(" in APP
     assert "def toggle_quick_result(self):" in APP

@@ -63,6 +63,39 @@ def read_list_file(path):
     mapping=_map_headers(rows[0].keys())
     if "title" not in mapping and "url" not in mapping: raise ValueError("Başlık veya İlan Linki sütunu bulunamadı.")
     return [_row_to_listing(r,mapping) for r in rows if any(str(v or "").strip() for v in r.values())]
+
+def write_list_file(path,items):
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment,Font,PatternFill
+
+    path=Path(path)
+    if path.suffix.lower() != ".xlsx":
+        raise ValueError("Dışa aktarma dosyası .xlsx uzantılı olmalıdır.")
+    headers=[
+        "İlan No","Başlık","Danışman","Telefon","Fiyat","Bölge","Oda",
+        "Satılık Kiralık","Emlak Türü","m2","İlan Tarihi","İlan Linki","Kaynak",
+    ]
+    wb=Workbook(); ws=wb.active; ws.title="İlan Listesi"
+    ws.append(headers)
+    for item in items:
+        ws.append([
+            item.listing_id,item.title,item.advisor,item.phone,item.price,item.location,
+            item.rooms,item.transaction_type,item.property_type,item.sqm,
+            item.listing_date,item.url,item.source_url,
+        ])
+        if item.url:
+            cell=ws.cell(ws.max_row,12); cell.hyperlink=item.url; cell.style="Hyperlink"
+    for cell in ws[1]:
+        cell.font=Font(color="FFFFFF",bold=True)
+        cell.fill=PatternFill("solid",fgColor="0B4DB8")
+        cell.alignment=Alignment(horizontal="center",vertical="center")
+    widths=[14,42,26,18,18,28,12,18,20,14,16,48,48]
+    for index,width in enumerate(widths,1):
+        ws.column_dimensions[chr(64+index)].width=width
+    ws.freeze_panes="A2"; ws.auto_filter.ref=ws.dimensions
+    path.parent.mkdir(parents=True,exist_ok=True)
+    wb.save(path)
+    return path
 def price_number(s):
     digits=re.sub(r"[^0-9]","",str(s or "")); return int(digits) if digits else None
 def is_valid_advisor(name):
@@ -77,10 +110,6 @@ def is_valid_advisor(name):
 def advisor_display_name(name):
     raw=" ".join(str(name or "").split())
     return raw if is_valid_advisor(raw) else "Belirtilmemiş"
-def _same_advisor_name(left,right):
-    a=norm(left).split(); b=norm(right).split()
-    if a==b:return True
-    return bool(a and b and a[0]==b[0] and a[-1]==b[-1] and (len(a)==2 or len(b)==2))
 def advisor_names(items):
     names={x.advisor.strip() for x in items if is_valid_advisor(x.advisor)}
     return sorted(names,key=norm)
@@ -112,10 +141,16 @@ Komut listesini gösterir.
 Gerçek danışmanları mevcut ilan adetleriyle listeler.
 
 #yahya kaptan kiralık 3+1
-Uygun ilanları danışman bazında sayar.
+Uygun ilanların linklerini danışman adıyla gönderir.
 
 #yahya kaptan kiralık 3+1 link
-Uygun ilanların linklerini danışman adıyla gönderir.
+Eski kullanım biçimidir; link kelimesi artık zorunlu değildir.
+
+#izmit kiralık dükkan-ofis
+Dükkan veya ofis türündeki kiralık ilanların linklerini gönderir.
+
+#izmit satılık ev-daire
+Ev veya daire türündeki satılık ilanların linklerini gönderir.
 
 #izmit kiralık 55 bin
 55.000 TL ve altındaki uygun ilanları linkleriyle gönderir.
@@ -137,6 +172,7 @@ Yalnızca MyRE/MAX listesindeki uygun ilanların linklerini gönderir.
 
 Komutta site adı yoksa Ayarlar bölümünde kayıtlı ilan linki kaynağı kullanılır.
 #danışmanlar komutu her zaman üç sitenin tamamını sayar.
+İlan aramalarında link kelimesi yazmanız gerekmez; sonuçlar doğrudan linkleriyle gönderilir.
 
 Komutun yalnızca başında # olması yeterlidir.
 Eski #komut# biçimi de desteklenir.
@@ -163,7 +199,7 @@ def parse_command(text):
     source=COMMAND_SOURCE_PREFIXES.get(norm(parts[0]))
     if source:
         body=parts[1].strip() if len(parts)>1 else ""
-    link=bool(source) or bool(re.search(r"\blink\b",norm(body))); body=re.sub(r"(?i)\blink\b"," ",body).strip()
+    link=True; body=re.sub(r"(?i)\blink\b"," ",body).strip()
     m=re.match(r"(?i)danışman\s+(.+)$",body)
     if not m:m=re.match(r"(?i)danisman\s+(.+)$",norm(body))
     if m:return {"type":"search","query":m.group(1).strip(),"links":link,"advisor_only":True,"target_price":None,"source":source}
@@ -193,23 +229,23 @@ def command_response(items,text,limit=12,link_source=None):
             current=unique_rows.get(unique_key)
             if current is None or (not is_valid_advisor(current.advisor) and is_valid_advisor(x.advisor)):
                 unique_rows[unique_key]=x
-        groups=[]
+        groups={}
         for unique_key,x in unique_rows.items():
             site=unique_key[0]
             if is_valid_advisor(x.advisor):
                 name=x.advisor.strip()
-                group=next((g for g in groups if _same_advisor_name(g["name"],name)),None)
+                advisor_key=norm(name)
+                group=groups.get(advisor_key)
                 if group is None:
                     group={"name":name,"counts":{"MyRE/MAX":0,"Emlakjet":0,"Sahibinden":0,"Diğer":0}}
-                    groups.append(group)
-                current=group["name"]
-                if len(norm(name).split())<len(norm(current).split()) or (current.isupper() and not name.isupper()):
+                    groups[advisor_key]=group
+                elif group["name"].isupper() and not name.isupper():
                     group["name"]=name
                 counts=group["counts"]
                 counts[site]+=1
         if not groups:return "İlan havuzunda geçerli danışman bilgisi bulunamadı."
         lines=["DANIŞMAN İLAN DAĞILIMI",""]
-        ordered=sorted(groups,key=lambda g:(-sum(g["counts"].values()),norm(g["name"])))
+        ordered=sorted(groups.values(),key=lambda g:(-sum(g["counts"].values()),norm(g["name"])))
         for group in ordered:
             name=group["name"]; counts=group["counts"]
             total=sum(counts.values())

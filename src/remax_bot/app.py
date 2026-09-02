@@ -8,9 +8,9 @@ from PySide6.QtWidgets import *
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEngineProfile,QWebEnginePage
 
-from .core import DB,Listing,source_label,split_listings_by_site
+from .core import DB,Listing,norm,source_key,source_label,split_listings_by_site,update_listing_fields
 from .playwright_scanner import PlaywrightScanner
-from .importer import LINK_SOURCES,read_list_file,command_response,command_help,advisor_names,advisor_display_name,filter_listings,price_number
+from .importer import LINK_SOURCES,read_list_file,write_list_file,command_response,command_help,advisor_names,advisor_display_name,is_valid_advisor,filter_listings,price_number
 from .whatsapp_playwright import ExternalWhatsAppBot
 from . import __version__
 
@@ -54,6 +54,45 @@ class SeymenRibbon(QWidget):
         p.setPen(Qt.black)
         f=QFont('Arial',23,QFont.Black); f.setItalic(True); p.setFont(f)
         p.drawText(self.rect(),Qt.AlignCenter,'SEYMEN')
+
+class ListingEditDialog(QDialog):
+    FIELDS=[
+        ('listing_id','İlan No'),('title','Başlık'),('advisor','Danışman'),
+        ('phone','Telefon'),('price','Fiyat'),('location','Bölge'),('rooms','Oda'),
+        ('transaction_type','Satılık / Kiralık'),('property_type','Emlak Türü'),
+        ('sqm','m²'),('listing_date','İlan Tarihi'),('url','İlan Linki'),
+        ('source_url','Kaynak Linki'),
+    ]
+
+    def __init__(self,item,parent=None,raw_item=None):
+        super().__init__(parent)
+        self.item=item
+        self.raw_item=raw_item or item
+        self.setWindowTitle('İlanı Düzenle')
+        self.resize(720,620)
+        layout=QVBoxLayout(self)
+        form=QFormLayout()
+        self.inputs={}
+        for field,label in self.FIELDS:
+            edit=QLineEdit(str(getattr(item,field) or ''))
+            edit.setObjectName(f'listing_{field}')
+            self.inputs[field]=edit
+            form.addRow(label+':',edit)
+        layout.addLayout(form)
+        save_button=QDialogButtonBox.StandardButton.Save
+        cancel_button=QDialogButtonBox.StandardButton.Cancel
+        buttons=QDialogButtonBox(save_button|cancel_button)
+        buttons.button(save_button).setText('İLANI GÜNCELLE')
+        buttons.button(cancel_button).setText('VAZGEÇ')
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+    def edited_listing(self):
+        values={field:edit.text() for field,edit in self.inputs.items()}
+        if values['advisor'].strip()==self.item.advisor.strip():
+            values['advisor']=self.raw_item.advisor
+        return update_listing_fields(self.raw_item,values)
 
 class Main(QMainWindow):
     def __init__(self):
@@ -256,12 +295,14 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         ])
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.itemSelectionChanged.connect(lambda t=table:self._remember_listing_table(t))
         [table.horizontalHeader().setSectionResizeMode(c,QHeaderView.Stretch) for c in [1,3,5,10]]
         table.cellDoubleClicked.connect(lambda row,_col,t=table:self.open_link(t,row))
         return table
 
     def _listings(self):
         p,l=self._page()
+        self._last_listing_table=None
 
         top=QHBoxLayout()
         title=QLabel('İlanlar')
@@ -281,21 +322,6 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         lt=QLabel('İlan Tarama ve İlan Havuzu')
         lt.setStyleSheet('font-size:18px;font-weight:900')
         lh.addWidget(lt)
-
-        self.source_combo=QComboBox()
-        self.source_combo.addItems(list(SOURCES.keys()))
-        lh.addWidget(self.source_combo)
-
-        scan=QPushButton('TARA / GÜNCELLE')
-        scan.setObjectName('blue')
-        scan.clicked.connect(self.scan_selected)
-        lh.addWidget(scan)
-
-        importb=QPushButton('EXCEL / CSV YÜKLE')
-        importb.setObjectName('ghost')
-        importb.clicked.connect(self.import_file)
-        lh.addWidget(importb)
-
         lh.addStretch()
         self.scanstatus=QLabel('Beklemede')
         self.scanprog=QLabel('0 / 0')
@@ -303,7 +329,35 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         lh.addWidget(self.scanprog)
         ll.addLayout(lh)
 
-        note=QLabel('TARA / GÜNCELLE seçilen kaynağı açar. Başarılı tarama yalnızca o kaynağın listesini günceller; diğer sitelerdeki ilanlar korunur.')
+        actions=QHBoxLayout()
+
+        self.source_combo=QComboBox()
+        self.source_combo.addItems(list(SOURCES.keys()))
+        actions.addWidget(self.source_combo)
+
+        scan=QPushButton('TARA / GÜNCELLE')
+        scan.setObjectName('blue')
+        scan.clicked.connect(self.scan_selected)
+        actions.addWidget(scan)
+
+        importb=QPushButton('EXCEL / CSV YÜKLE')
+        importb.setObjectName('ghost')
+        importb.clicked.connect(self.import_file)
+        actions.addWidget(importb)
+
+        exportb=QPushButton("EXCEL'E AKTAR")
+        exportb.setObjectName('ghost')
+        exportb.clicked.connect(self.export_current_site)
+        actions.addWidget(exportb)
+
+        editb=QPushButton('SEÇİLİ İLANI DÜZENLE')
+        editb.setObjectName('ghost')
+        editb.clicked.connect(self.edit_selected_listing)
+        actions.addWidget(editb)
+        actions.addStretch()
+        ll.addLayout(actions)
+
+        note=QLabel("TARA / GÜNCELLE seçilen kaynağı açar. EXCEL'E AKTAR aktif site sekmesindeki tüm ilanları çıkarır; MyRE/MAX ve Sahibinden sekmeleri iki ofisi/mağazayı birlikte içerir.")
         note.setWordWrap(True)
         note.setStyleSheet(f'color:{MUTED};font-size:11px;padding:2px 0 6px 0')
         ll.addWidget(note)
@@ -348,6 +402,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
             table=self._new_listing_table()
             self.site_tables[site]=table
             self.listing_tabs.addTab(table,site)
+        self.listing_tabs.currentChanged.connect(self._listing_tab_changed)
         ll.addWidget(self.listing_tabs,1)
 
         self.other_box=QGroupBox('İçe Aktarılan / Kaynağı Belirsiz')
@@ -472,7 +527,16 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.stack.addWidget(p)
 
     def _settings(self):
-        p,l=self._page()
+        p,outer=self._page()
+        scroll=QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        content=QWidget()
+        l=QVBoxLayout(content)
+        l.setContentsMargins(0,0,0,0)
+        l.setSpacing(12)
+        scroll.setWidget(content)
+        outer.addWidget(scroll)
         t=QLabel('Ayarlar')
         t.setStyleSheet('font-size:24px;font-weight:900')
         l.addWidget(t)
@@ -501,7 +565,59 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         save.clicked.connect(self.save_settings)
         l.addWidget(save,0,Qt.AlignLeft)
 
-        l.addStretch()
+        merge_box=QGroupBox('Danışman İsimlerini Birleştir')
+        merge_layout=QVBoxLayout(merge_box)
+        merge_note=QLabel('Yalnızca işaretlediğiniz isimler birleştirilir. Aynı soyadlı diğer danışmanlar değiştirilmez; kural sonraki tarama ve yüklemelerde de uygulanır.')
+        merge_note.setWordWrap(True)
+        merge_note.setStyleSheet(f'color:{MUTED};font-size:11px')
+        merge_layout.addWidget(merge_note)
+
+        merge_columns=QHBoxLayout()
+        available=QVBoxLayout()
+        available.addWidget(QLabel('Tüm danışmanlar'))
+        self.advisor_merge_search=QLineEdit()
+        self.advisor_merge_search.setPlaceholderText('İsimlerde ara...')
+        available.addWidget(self.advisor_merge_search)
+        self.advisor_merge_list=QListWidget()
+        self.advisor_merge_list.setMinimumHeight(190)
+        available.addWidget(self.advisor_merge_list)
+        merge_columns.addLayout(available,2)
+
+        selected=QVBoxLayout()
+        selected.addWidget(QLabel('Seçilen isimler'))
+        self.advisor_merge_selected=QListWidget()
+        self.advisor_merge_selected.setMinimumHeight(150)
+        selected.addWidget(self.advisor_merge_selected)
+        selected.addWidget(QLabel('Kullanılacak ana isim'))
+        self.advisor_canonical=QComboBox()
+        self.advisor_canonical.setEditable(True)
+        self.advisor_canonical.setInsertPolicy(QComboBox.NoInsert)
+        selected.addWidget(self.advisor_canonical)
+        merge_columns.addLayout(selected,2)
+        merge_layout.addLayout(merge_columns)
+
+        merge_actions=QHBoxLayout()
+        merge_button=QPushButton('BİRLEŞTİR VE GÜNCELLE')
+        merge_button.setObjectName('blue')
+        merge_button.clicked.connect(self.merge_selected_advisors)
+        merge_actions.addWidget(merge_button)
+        merge_actions.addStretch()
+        self.advisor_alias_group=QComboBox()
+        self.advisor_alias_group.setMinimumWidth(260)
+        merge_actions.addWidget(self.advisor_alias_group)
+        unmerge_button=QPushButton('BİRLEŞTİRMEYİ KALDIR')
+        unmerge_button.setObjectName('ghost')
+        unmerge_button.clicked.connect(self.unmerge_advisor_group)
+        merge_actions.addWidget(unmerge_button)
+        merge_layout.addLayout(merge_actions)
+        l.addWidget(merge_box,1)
+
+        self._advisor_merge_selection=set()
+        self._updating_advisor_merge=False
+        self.advisor_merge_search.textChanged.connect(self.refresh_advisor_merge_list)
+        self.advisor_merge_list.itemChanged.connect(self.advisor_merge_item_changed)
+        self.refresh_advisor_merge_list()
+
         self.stack.addWidget(p)
 
     def refresh(self,rows=None):
@@ -523,6 +639,8 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
             self.advisor_filter.blockSignals(False)
 
         self.fill(all_rows if rows is None else rows)
+        if hasattr(self,'advisor_merge_list'):
+            self.refresh_advisor_merge_list()
 
     def fill(self,rows):
         buckets=split_listings_by_site(rows)
@@ -542,7 +660,9 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
                 ' / '.join(v for v in [x.transaction_type,x.property_type] if v),x.listing_date,x.url
             ]
             for c,v in enumerate(vals):
-                table.setItem(r,c,QTableWidgetItem(v))
+                cell=QTableWidgetItem(v)
+                if c==0: cell.setData(Qt.UserRole,(x.source_url,x.listing_id))
+                table.setItem(r,c,cell)
 
     def apply_filters(self):
         advisor='' if self.advisor_filter.currentIndex()==0 else self.advisor_filter.currentText()
@@ -583,6 +703,61 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
             QMessageBox.information(self,'İçe Aktarma',f'{len(items)} ilan eklendi/güncellendi.')
         except Exception as e:
             QMessageBox.warning(self,'İçe Aktarma',str(e))
+
+    def export_current_site(self):
+        sites=list(self.site_tables)
+        site=sites[self.listing_tabs.currentIndex()]
+        rows=split_listings_by_site(self.db.all())[site]
+        if not rows:
+            QMessageBox.warning(self,'Excel Dışa Aktarma',f'{site} listesinde aktarılacak ilan yok.')
+            return
+        stamp=datetime.now().strftime('%Y%m%d')
+        suggested=f"REMAX_{site.replace('/','-')}_{stamp}.xlsx"
+        path,_=QFileDialog.getSaveFileName(self,'İlanları Excel’e Aktar',suggested,'Excel (*.xlsx)')
+        if not path:return
+        if not path.lower().endswith('.xlsx'):path+='.xlsx'
+        try:
+            write_list_file(path,rows)
+            QMessageBox.information(self,'Excel Dışa Aktarma',f'{site}: {len(rows)} ilan kaydedildi.\n{path}')
+        except Exception as error:
+            QMessageBox.warning(self,'Excel Dışa Aktarma',str(error))
+
+    def edit_selected_listing(self):
+        current_table=self.listing_tabs.currentWidget()
+        table=self._last_listing_table
+        if table is None or table.currentRow()<0:
+            table=current_table
+        row=table.currentRow()
+        if row<0:
+            QMessageBox.warning(self,'İlan Düzenle','Önce tablodan bir ilan seçin.')
+            return
+        identity=table.item(row,0).data(Qt.UserRole) if table.item(row,0) else None
+        if not identity:
+            QMessageBox.warning(self,'İlan Düzenle','Seçilen ilanın kayıt bilgisi bulunamadı.')
+            return
+        original_source,original_id=identity
+        raw_item=self.db.raw_listing(original_source,original_id)
+        item=next((x for x in self.db.all() if source_key(x.source_url)==source_key(original_source) and str(x.listing_id)==str(original_id)),None)
+        if item is None or raw_item is None:
+            QMessageBox.warning(self,'İlan Düzenle','Seçilen ilan veritabanında bulunamadı.')
+            return
+        dialog=ListingEditDialog(item,self,raw_item=raw_item)
+        if dialog.exec()!=QDialog.Accepted:return
+        updated=dialog.edited_listing()
+        try:
+            self.db.update_listing(original_source,original_id,updated)
+        except ValueError as error:
+            QMessageBox.warning(self,'İlan Düzenle',str(error))
+            return
+        self.refresh()
+        QMessageBox.information(self,'İlan Düzenle','İlan bilgileri güncellendi.')
+
+    def _remember_listing_table(self,table):
+        if table.selectionModel().hasSelection():
+            self._last_listing_table=table
+
+    def _listing_tab_changed(self,_index):
+        self._last_listing_table=None
 
     def manual_add(self):
         title=self.m_title.text().strip()
@@ -641,6 +816,74 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self._save_settings()
         self.wabot.set_group(self.settings.get('group',''))
         self.refresh()
+
+    def refresh_advisor_merge_list(self,*_args):
+        if not hasattr(self,'advisor_merge_list'):return
+        query=norm(self.advisor_merge_search.text())
+        names=[name for name in self.db.raw_advisor_names() if is_valid_advisor(name)]
+        self._updating_advisor_merge=True
+        self.advisor_merge_list.clear()
+        for name in names:
+            if query and query not in norm(name):continue
+            item=QListWidgetItem(name)
+            item.setData(Qt.UserRole,name)
+            item.setFlags(item.flags()|Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked if name in self._advisor_merge_selection else Qt.CheckState.Unchecked)
+            self.advisor_merge_list.addItem(item)
+        self._updating_advisor_merge=False
+        self._refresh_advisor_merge_summary()
+
+    def advisor_merge_item_changed(self,item):
+        if self._updating_advisor_merge:return
+        name=item.data(Qt.UserRole)
+        if item.checkState()==Qt.CheckState.Checked:self._advisor_merge_selection.add(name)
+        else:self._advisor_merge_selection.discard(name)
+        self._refresh_advisor_merge_summary()
+
+    def _refresh_advisor_merge_summary(self):
+        names=sorted(self._advisor_merge_selection,key=norm)
+        self.advisor_merge_selected.clear()
+        self.advisor_merge_selected.addItems(names)
+        current=self.advisor_canonical.currentText().strip()
+        self.advisor_canonical.blockSignals(True)
+        self.advisor_canonical.clear()
+        self.advisor_canonical.addItems(names)
+        if not names:self.advisor_canonical.setEditText('')
+        elif current:self.advisor_canonical.setEditText(current)
+        elif names:self.advisor_canonical.setCurrentText(names[0])
+        self.advisor_canonical.blockSignals(False)
+
+        current_group=self.advisor_alias_group.currentData()
+        groups={}
+        for alias,canonical in self.db.advisor_aliases():
+            groups.setdefault(canonical,[]).append(alias)
+        self.advisor_alias_group.clear()
+        for canonical,aliases in sorted(groups.items(),key=lambda pair:norm(pair[0])):
+            self.advisor_alias_group.addItem(f'{canonical} ({len(aliases)} isim)',canonical)
+        if current_group:
+            index=self.advisor_alias_group.findData(current_group)
+            if index>=0:self.advisor_alias_group.setCurrentIndex(index)
+
+    def merge_selected_advisors(self):
+        names=sorted(self._advisor_merge_selection,key=norm)
+        canonical=self.advisor_canonical.currentText().strip()
+        if not names or not canonical:
+            QMessageBox.warning(self,'Danışman Birleştirme','En az bir danışman seçin ve kullanılacak ana ismi yazın.')
+            return
+        self.db.merge_advisors(names,canonical)
+        self._advisor_merge_selection.clear()
+        self.refresh()
+        QMessageBox.information(self,'Danışman Birleştirme',f'{len(names)} isim “{canonical}” altında birleştirildi.')
+
+    def unmerge_advisor_group(self):
+        canonical=self.advisor_alias_group.currentData()
+        if not canonical:
+            QMessageBox.warning(self,'Danışman Birleştirme','Kaldırılacak bir birleştirme seçin.')
+            return
+        self.db.unmerge_advisor(canonical)
+        self._advisor_merge_selection.clear()
+        self.refresh()
+        QMessageBox.information(self,'Danışman Birleştirme',f'“{canonical}” birleştirmesi kaldırıldı.')
 
     def open_link(self,table,row):
         x=table.item(row,10)

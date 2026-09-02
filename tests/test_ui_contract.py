@@ -34,7 +34,19 @@ def test_navigation_and_listing_tools_remain_available():
     assert "İçe Aktarılan / Kaynağı Belirsiz" in listings
     assert "self.advisor_filter" in listings
     assert "TARA / GÜNCELLE" in listings
-    assert "EXCEL / CSV YÜKLE" in listings
+    assert "SEÇİLİ İLANI DÜZENLE" in listings
+
+
+def test_data_movement_controls_are_collected_on_the_data_page():
+    listings = APP[APP.index("    def _listings(self):"):APP.index("    def _data(self):")]
+    data = APP[APP.index("    def _data(self):"):APP.index("    def _web(self):")]
+
+    assert "EXCEL / CSV YÜKLE" not in listings
+    assert "EXCEL'E AKTAR" not in listings
+    assert "EXCEL / CSV YÜKLE" in data
+    assert "VERİLERİ EXCEL'E AKTAR" in data
+    assert "self.export_source.addItems(list(LINK_SOURCES))" in data
+    assert "exportb.clicked.connect(self.export_selected_site)" in data
 
 
 def test_listing_editor_forgets_a_hidden_table_when_the_site_tab_changes():

@@ -356,8 +356,8 @@ def test_application_and_package_versions_match():
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     package = (ROOT / "src/remax_bot/__init__.py").read_text(encoding="utf-8")
 
-    assert project["project"]["version"] == "0.41.0"
-    assert '__version__="0.41.0"' in package
+    assert project["project"]["version"] == "0.41.1"
+    assert '__version__="0.41.1"' in package
 
 
 def test_all_embedded_browser_scripts_are_valid_javascript():

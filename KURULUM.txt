@@ -1,4 +1,4 @@
-RE/MAX İlan Botu V0.41.0 - Harici Google Chrome WhatsApp Okuyucusu
+RE/MAX İlan Botu V0.41.1 - Harici Google Chrome WhatsApp Okuyucusu
 
 ÇALIŞMA ŞEKLİ
 1. Uygulamanın otomatik açtığı ayrı Google Chrome penceresinde WhatsApp Web oturumu açın. İlk kullanımda QR kodunu okutun.
@@ -58,5 +58,10 @@ V0.41.0 YENİLİKLERİ
 - Normal ilan aramaları link kelimesi olmadan da ilan linklerini gönderir.
 - Ayarlarda danışman adları seçilerek kalıcı biçimde tek ad altında birleştirilebilir veya birleştirme kaldırılabilir.
 - Danışman birleştirme kuralları sonraki tarama ve dosya yüklemelerinde otomatik uygulanır.
+
+V0.41.1 DÜZENLEMELERİ
+- Excel/CSV yükleme ve Excel dışa aktarma işlemleri Veri Ekle sayfasında toplandı.
+- İlanlar sayfasında yalnızca tarama, filtreleme ve seçili ilanı düzenleme işlemleri bırakıldı.
+- Dışa aktarılacak Sahibinden, Emlakjet veya MyRE/MAX listesi Veri Ekle sayfasından seçilebilir.
 
 Hazır Windows ve macOS paketleri GitHub Actions bölümündeki son başarılı çalıştırmanın Artifacts alanındadır.

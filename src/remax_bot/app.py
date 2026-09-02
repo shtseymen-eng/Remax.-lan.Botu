@@ -340,16 +340,6 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         scan.clicked.connect(self.scan_selected)
         actions.addWidget(scan)
 
-        importb=QPushButton('EXCEL / CSV YÜKLE')
-        importb.setObjectName('ghost')
-        importb.clicked.connect(self.import_file)
-        actions.addWidget(importb)
-
-        exportb=QPushButton("EXCEL'E AKTAR")
-        exportb.setObjectName('ghost')
-        exportb.clicked.connect(self.export_current_site)
-        actions.addWidget(exportb)
-
         editb=QPushButton('SEÇİLİ İLANI DÜZENLE')
         editb.setObjectName('ghost')
         editb.clicked.connect(self.edit_selected_listing)
@@ -357,7 +347,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         actions.addStretch()
         ll.addLayout(actions)
 
-        note=QLabel("TARA / GÜNCELLE seçilen kaynağı açar. EXCEL'E AKTAR aktif site sekmesindeki tüm ilanları çıkarır; MyRE/MAX ve Sahibinden sekmeleri iki ofisi/mağazayı birlikte içerir.")
+        note=QLabel('TARA / GÜNCELLE seçilen kaynağı açar. Dosya yükleme ve Excel dışa aktarma işlemleri Veri Ekle sayfasından yapılır.')
         note.setWordWrap(True)
         note.setStyleSheet(f'color:{MUTED};font-size:11px;padding:2px 0 6px 0')
         ll.addWidget(note)
@@ -428,14 +418,41 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         t.setStyleSheet('font-size:24px;font-weight:900')
         l.addWidget(t)
 
-        info=QLabel('Excel/CSV içe aktarımı ve manuel kayıt mevcut ilan havuzuna eklenir.')
+        info=QLabel('Dosyadan veri ekleme, manuel kayıt ve Excel dışa aktarma işlemlerini bu sayfadan yönetebilirsiniz.')
         info.setStyleSheet(f'color:{MUTED}')
         l.addWidget(info)
 
+        movement=QHBoxLayout()
+
+        import_box=QGroupBox('Dosyadan Veri Ekle')
+        import_layout=QVBoxLayout(import_box)
+        import_note=QLabel('Excel veya CSV dosyasındaki ilanları kaynak bilgileriyle ilan havuzuna ekler.')
+        import_note.setWordWrap(True)
+        import_layout.addWidget(import_note)
         imp=QPushButton('EXCEL / CSV YÜKLE')
         imp.setObjectName('blue')
         imp.clicked.connect(self.import_file)
-        l.addWidget(imp,0,Qt.AlignLeft)
+        import_layout.addWidget(imp)
+        movement.addWidget(import_box,1)
+
+        export_box=QGroupBox('Verileri Dışarı Aktar')
+        export_layout=QVBoxLayout(export_box)
+        export_note=QLabel('Seçilen sitenin bütün ilanlarını Excel dosyası olarak kaydeder.')
+        export_note.setWordWrap(True)
+        export_layout.addWidget(export_note)
+        export_row=QHBoxLayout()
+        self.export_source=QComboBox()
+        self.export_source.addItems(list(LINK_SOURCES))
+        self.export_source.setCurrentText(list(self.site_tables)[self.listing_tabs.currentIndex()])
+        export_row.addWidget(self.export_source)
+        exportb=QPushButton("VERİLERİ EXCEL'E AKTAR")
+        exportb.setObjectName('ghost')
+        exportb.clicked.connect(self.export_selected_site)
+        export_row.addWidget(exportb)
+        export_layout.addLayout(export_row)
+        movement.addWidget(export_box,1)
+
+        l.addLayout(movement)
 
         box=QGroupBox('Manuel İlan Ekle')
         f=QFormLayout(box)
@@ -704,9 +721,8 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         except Exception as e:
             QMessageBox.warning(self,'İçe Aktarma',str(e))
 
-    def export_current_site(self):
-        sites=list(self.site_tables)
-        site=sites[self.listing_tabs.currentIndex()]
+    def export_selected_site(self):
+        site=self.export_source.currentText()
         rows=split_listings_by_site(self.db.all())[site]
         if not rows:
             QMessageBox.warning(self,'Excel Dışa Aktarma',f'{site} listesinde aktarılacak ilan yok.')

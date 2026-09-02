@@ -6,7 +6,7 @@ Windows ve macOS üzerinde çalışan ilan yönetimi ve WhatsApp yanıt uygulama
 
 - İki MyRE/MAX ofisini, Emlakjet ÇARŞI ofisini ve iki Sahibinden mağazasını ayrı kaynaklar olarak tarar.
 - İlanlar sayfasını Sahibinden, Emlakjet ve MyRE/MAX sekmelerinde ayrı listeler.
-- Aktif site sekmesindeki tüm ilanları Excel'e aktarır; MyRE/MAX ve Sahibinden sekmeleri kendi iki ofis/mağaza kaynaklarını birlikte içerir.
+- Veri Ekle sayfasında seçilen sitenin tüm ilanlarını Excel'e aktarır; MyRE/MAX ve Sahibinden seçimleri kendi iki ofis/mağaza kaynaklarını birlikte içerir.
 - Tabloda seçilen bir ilanın hatalı alanlarını uygulama içinde düzenleyip günceller.
 - `#danışmanlar` komutunda her danışmanın üç sitedeki ilan adetlerini ayrı ayrı gösterir.
 - Excel/CSV dosyalarından veya manuel girişten ilan ekler.
@@ -65,7 +65,7 @@ Normal ilan sorguları, Ayarlar bölümünde seçili sitedeki sonuçları linkle
 3. Site güvenlik doğrulaması isterse açılan tarama penceresinde doğrulamayı tamamlayın.
 4. Tarama eksik kalırsa o kaynağın önceki ilanları korunur; başarılı olursa yalnızca seçilen kaynak yenilenir.
 
-Aktif Sahibinden, Emlakjet veya MyRE/MAX sekmesindeki tüm ilanları almak için **EXCEL'E AKTAR** düğmesini kullanın. Bir satırı düzeltmek için satırı seçip **SEÇİLİ İLANI DÜZENLE** düğmesine basın. Kaynak sütunu dışa aktarılan dosyada korunduğu için dosya yeniden yüklendiğinde ilanlar doğru site sekmesine döner.
+Dosya yükleme ve dışa aktarma işlemleri **Veri Ekle** sayfasında birlikte bulunur. Sahibinden, Emlakjet veya MyRE/MAX kaynağını seçip **VERİLERİ EXCEL'E AKTAR** düğmesini kullanın. Bir satırı düzeltmek için İlanlar sayfasında satırı seçip **SEÇİLİ İLANI DÜZENLE** düğmesine basın. Kaynak sütunu dışa aktarılan dosyada korunduğu için dosya yeniden yüklendiğinde ilanlar doğru site sekmesine döner.
 
 Danışman yazım farklılıklarını düzeltmek için **Ayarlar > Danışman İsimlerini Birleştir** alanında isimleri işaretleyin, kullanılacak ana ismi seçin veya yazın ve **BİRLEŞTİR VE GÜNCELLE** düğmesine basın. Sadece işaretlenen isimler birleşir; kural sonraki tarama ve yüklemelere de uygulanır. Aynı alandan birleştirmeyi kaldırabilirsiniz.
 

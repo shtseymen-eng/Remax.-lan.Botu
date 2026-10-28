@@ -22,3 +22,9 @@ def test_scanner_paginates_after_cards():
     assert 'CLICK_PAGE_JS' in s
     assert '_next_page' in s
     assert 'Sayfa {self.page_no} tamamlandı' in s
+
+
+def test_embedded_detail_payload_includes_address_and_extra_details():
+    s=scanner_text()
+    for token in ['province','district','neighborhood','street','complexName','fullAddress','description','netSqm','details']:
+        assert token in s

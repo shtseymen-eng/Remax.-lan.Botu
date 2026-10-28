@@ -18,8 +18,9 @@ except ImportError:
         def emit(self, *args, **kwargs):
             pass
 
-from .core import Listing, source_key
+from .core import Listing, norm, source_key
 from .importer import is_valid_advisor
+from .listing_details import normalize_details
 
 MONTHS = "Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık"
 
@@ -114,6 +115,35 @@ def source_platform(url: str) -> str:
     if host=="sahibinden.com" or host.endswith(".sahibinden.com"): return "sahibinden"
     return "unknown"
 
+def normalize_detail_pairs(pairs) -> dict[str,str]:
+    out={}
+    for item in pairs or []:
+        if isinstance(item,dict):
+            label=item.get("label",""); value=item.get("value","")
+        else:
+            try: label,value=item
+            except (TypeError,ValueError): continue
+        label=" ".join(str(label or "").split())
+        value=" ".join(str(value or "").split())
+        if label and value and norm(label) not in {norm(key) for key in out}:
+            out[label]=value
+    return out
+
+def _detail_value(details:dict,*labels:str)->str:
+    values={norm(key):value for key,value in normalize_details(details).items()}
+    return next((values[norm(label)] for label in labels if norm(label) in values),"")
+
+def _sqm_value(value:str)->str:
+    value=" ".join(str(value or "").split())
+    return value if not value or re.search(r"m(?:²|2)",value,re.I) else f"{value} m²"
+
+def _slash_location_parts(text:str)->tuple[str,str,str]:
+    for line in (text or "").splitlines():
+        parts=[" ".join(part.split()) for part in line.split("/")]
+        if 2<=len(parts)<=4 and all(part and not re.search(r"\d",part) for part in parts[:3]):
+            return tuple((parts+["",""])[:3])
+    return "","",""
+
 def _label_value(lines: list[str], *labels: str) -> str:
     folded=[x.casefold() for x in lines]
     for label in labels:
@@ -124,7 +154,8 @@ def _label_value(lines: list[str], *labels: str) -> str:
             pass
     return ""
 
-def parse_remax_detail(*, text: str, url: str, source_url: str) -> Listing:
+def parse_remax_detail(*, text: str, url: str, source_url: str, details=None) -> Listing:
+    detail_map=normalize_details(details)
     lines=[re.sub(r"\s+", " ", x).strip() for x in (text or "").splitlines() if x.strip()]
     lid=_label_value(lines,"Portföy No")
     if not lid:
@@ -141,7 +172,8 @@ def parse_remax_detail(*, text: str, url: str, source_url: str) -> Listing:
     parts=[x.strip() for x in emlak.split("/")]
     ptype=parts[0] if parts else ""; trans=parts[1] if len(parts)>1 else ""
     rooms=_label_value(lines,"Oda Sayısı","Bölüm & Oda Sayısı")
-    gross=_label_value(lines,"m2 (Brüt)","m² (Brüt)","m²","m2")
+    gross=_detail_value(detail_map,"m2 (Brüt)","m² (Brüt)","Brüt m²") or _label_value(lines,"m2 (Brüt)","m² (Brüt)","m²","m2")
+    net=_detail_value(detail_map,"m2 (Net)","m² (Net)","Net m²") or _label_value(lines,"m2 (Net)","m² (Net)")
     date=_label_value(lines,"Yayınlanma Tarihi")
     phone=_extract_phone(text)
     advisor=_label_value(lines,"Gayrimenkul Danışmanı","Danışman")
@@ -159,7 +191,35 @@ def parse_remax_detail(*, text: str, url: str, source_url: str) -> Listing:
     location=""
     for x in lines:
         if re.search(r"Kocaeli\s*/|İzmit\s*/|Başiskele\s*/|Kartepe\s*/|Kandıra\s*/|Gölcük\s*/|Derince\s*/|Körfez\s*/",x,re.I): location=x; break
-    return Listing(str(lid),title,normalize_listing_url(url),advisor,phone,price,location,rooms,trans,ptype,(gross+" m²") if gross else "",date,source_key(source_url))
+    province=_detail_value(detail_map,"İl","Şehir")
+    district=_detail_value(detail_map,"İlçe")
+    neighborhood=_detail_value(detail_map,"Mahalle","Semt")
+    try:
+        portfolio_index=next(i for i,line in enumerate(lines) if line.casefold()=="portföy no")
+    except StopIteration:
+        portfolio_index=-1
+    if portfolio_index>0 and not all((province,district,neighborhood)):
+        breadcrumb=[
+            line for line in lines[max(0,portfolio_index-6):portfolio_index]
+            if line not in {title,"İlan Detayı"} and not re.search(r"(?:₺|TL)",line,re.I)
+        ][-3:]
+        if len(breadcrumb)>=2:
+            province=province or breadcrumb[0]
+            district=district or breadcrumb[1]
+            if len(breadcrumb)>=3: neighborhood=neighborhood or breadcrumb[2]
+    if not location:
+        location=" / ".join(value for value in (province,district,neighborhood) if value)
+    return Listing(
+        listing_id=str(lid),title=title,url=normalize_listing_url(url),advisor=advisor,phone=phone,
+        price=price,location=location,rooms=rooms,transaction_type=trans,property_type=ptype,
+        sqm=_sqm_value(gross),listing_date=date,source_url=source_key(source_url),province=province,
+        district=district,neighborhood=neighborhood,
+        street=_detail_value(detail_map,"Sokak/Cadde","Sokak","Cadde"),
+        complex_name=_detail_value(detail_map,"Site/Proje","Site Adı","Proje Adı"),
+        full_address=_detail_value(detail_map,"Açık Adres","Tam Adres","Adres"),
+        description=_detail_value(detail_map,"İlan Açıklaması","Açıklama"),
+        net_sqm=_sqm_value(net),details=detail_map,
+    )
 
 def extract_emlakjet_total_count(text: str) -> int:
     for pattern in (r"İlan Sayısı\s*:\s*([\d.]+)",r"Tüm İlanlar\s+([\d.]+)"):
@@ -174,7 +234,8 @@ def _value_before_label(lines: list[str], label: str) -> str:
             return lines[i-1]
     return ""
 
-def parse_emlakjet_detail(*,text:str,url:str,source_url:str,title:str="",price:str="",advisor:str="",phone:str="") -> Listing:
+def parse_emlakjet_detail(*,text:str,url:str,source_url:str,title:str="",price:str="",advisor:str="",phone:str="",details=None) -> Listing:
+    detail_map=normalize_details(details)
     text=text or ""
     lines=[re.sub(r"\s+"," ",line).strip() for line in text.splitlines() if line.strip()]
     clean_url=normalize_listing_url(url)
@@ -191,9 +252,9 @@ def parse_emlakjet_detail(*,text:str,url:str,source_url:str,title:str="",price:s
     if not price:
         price=next((line for line in lines if re.fullmatch(r"[\d.]+\s*₺",line)),"")
     rooms=_value_before_label(lines,"Oda Sayısı")
-    sqm=_value_before_label(lines,"Brüt")
-    if sqm and not re.search(r"m(?:²|2)",sqm,re.I):
-        sqm=f"{sqm} m²"
+    sqm=_detail_value(detail_map,"Brüt","Brüt m²","m2 (Brüt)") or _value_before_label(lines,"Brüt")
+    sqm=_sqm_value(sqm)
+    net_sqm=_sqm_value(_detail_value(detail_map,"Net","Net m²","m2 (Net)"))
     date_match=re.search(r"İlan Güncelleme Tarihi\s+([^\n]+)",text,re.I)
     listing_date=date_match.group(1).strip() if date_match else ""
     category_match=re.search(r"Kategori\s+([^\n]+)",text,re.I)
@@ -201,11 +262,16 @@ def parse_emlakjet_detail(*,text:str,url:str,source_url:str,title:str="",price:s
     transaction_type=next((value for value in ("Devren","Kiralık","Satılık") if value.casefold() in category.casefold()),"")
     property_type=re.sub(r"^(?:Devren|Kiralık|Satılık)\s+","",category,flags=re.I).strip()
 
-    location=""
+    location=""; province=""; district=""; neighborhood=""
     location_match=re.search(r"([^,\n]+),\s*([^,\n]+),\s*([^\n-]+)\s*-\s*Haritada",text,re.I)
     if location_match:
         neighborhood,district,province=(part.strip() for part in location_match.groups())
         location=" / ".join((province,district,neighborhood))
+    province=_detail_value(detail_map,"İl","Şehir") or province
+    district=_detail_value(detail_map,"İlçe") or district
+    neighborhood=_detail_value(detail_map,"Mahalle","Semt") or neighborhood
+    if not location:
+        location=" / ".join(value for value in (province,district,neighborhood) if value)
     if not is_valid_advisor(advisor):
         advisor=""
         for pattern in (
@@ -220,8 +286,16 @@ def parse_emlakjet_detail(*,text:str,url:str,source_url:str,title:str="",price:s
     if not phone:
         phone=_extract_phone(text)
     return Listing(
-        str(listing_id),title or f"İlan {listing_id}",clean_url,advisor,phone,price,location,
-        rooms,transaction_type,property_type,sqm,listing_date,source_key(source_url)
+        listing_id=str(listing_id),title=title or f"İlan {listing_id}",url=clean_url,
+        advisor=advisor,phone=phone,price=price,location=location,rooms=rooms,
+        transaction_type=transaction_type,property_type=property_type,sqm=sqm,
+        listing_date=listing_date,source_url=source_key(source_url),province=province,
+        district=district,neighborhood=neighborhood,
+        street=_detail_value(detail_map,"Sokak/Cadde","Sokak","Cadde"),
+        complex_name=_detail_value(detail_map,"Site/Proje","Site Adı","Proje Adı"),
+        full_address=_detail_value(detail_map,"Açık Adres","Tam Adres","Adres"),
+        description=_detail_value(detail_map,"İlan Açıklaması","Açıklama"),
+        net_sqm=net_sqm,details=detail_map,
     )
 
 def extract_total_count(text: str) -> int:
@@ -257,8 +331,9 @@ def _extract_phone(text: str) -> str:
     return f"0{m.group(1)} {m.group(2)} {m.group(3)} {m.group(4)}" if m else ""
 
 
-def parse_listing_detail(*, text: str, url: str, source_url: str, title: str = "", price: str = "", advisor: str = "", phone: str = "") -> Listing:
+def parse_listing_detail(*, text: str, url: str, source_url: str, title: str = "", price: str = "", advisor: str = "", phone: str = "", details=None) -> Listing:
     text = text or ""
+    detail_map=normalize_details(details)
     clean_url = normalize_listing_url(url)
     id_match = re.search(r"(?:İlan No|İlan No:)\s*[:#]?\s*(\d+)", text, re.I)
     if id_match:
@@ -270,7 +345,9 @@ def parse_listing_detail(*, text: str, url: str, source_url: str, title: str = "
     room_match = re.search(r"\b(\d+(?:\.\d+)?\+\d+)\b", text)
     rooms = room_match.group(1) if room_match else ""
     sqm_match = re.search(r"\b([\d.]+)\s*m(?:²|2)\b", text, re.I)
-    sqm = f"{sqm_match.group(1)} m²" if sqm_match else ""
+    sqm = _sqm_value(_detail_value(detail_map,"Brüt m²","Brüt","m2 (Brüt)"))
+    if not sqm: sqm = f"{sqm_match.group(1)} m²" if sqm_match else ""
+    net_sqm=_sqm_value(_detail_value(detail_map,"Net m²","Net","m2 (Net)"))
     date_match = re.search(rf"\b(\d{{1,2}}\s+(?:{MONTHS})\s+\d{{4}})\b", text, re.I)
     listing_date = date_match.group(1) if date_match else ""
 
@@ -286,13 +363,11 @@ def parse_listing_detail(*, text: str, url: str, source_url: str, title: str = "
     if not phone:
         phone = _extract_phone(text)
 
-    location = ""
-    loc_match = re.search(
-        r"([A-Za-zÇĞİÖŞÜçğıöşü ]+)\s*/\s*([A-Za-zÇĞİÖŞÜçğıöşü ]+)(?:\s*/\s*([A-Za-zÇĞİÖŞÜçğıöşü ]+))?",
-        text,
-    )
-    if loc_match:
-        location = " / ".join(p.strip() for p in loc_match.groups() if p and p.strip())
+    province,district,neighborhood=_slash_location_parts(text)
+    province=_detail_value(detail_map,"İl","Şehir") or province
+    district=_detail_value(detail_map,"İlçe") or district
+    neighborhood=_detail_value(detail_map,"Mahalle","Semt") or neighborhood
+    location = " / ".join(value for value in (province,district,neighborhood) if value)
 
     low = f"{title} {text[:8000]}".casefold()
     transaction_type = "Devren Kiralık" if "devren kiralık" in low else "Kiralık" if "kiralık" in low else "Satılık" if "satılık" in low else ""
@@ -302,7 +377,13 @@ def parse_listing_detail(*, text: str, url: str, source_url: str, title: str = "
         listing_id=str(listing_id), title=(title or f"İlan {listing_id}").strip(), url=clean_url,
         advisor=(advisor or "").strip(), phone=(phone or "").strip(), price=(price or "").strip(),
         location=location, rooms=rooms, transaction_type=transaction_type, property_type=property_type,
-        sqm=sqm, listing_date=listing_date, source_url=source_key(source_url),
+        sqm=sqm, listing_date=listing_date, source_url=source_key(source_url),province=province,
+        district=district,neighborhood=neighborhood,
+        street=_detail_value(detail_map,"Sokak/Cadde","Sokak","Cadde"),
+        complex_name=_detail_value(detail_map,"Site/Proje","Site Adı","Proje Adı"),
+        full_address=_detail_value(detail_map,"Açık Adres","Tam Adres","Adres"),
+        description=_detail_value(detail_map,"İlan Açıklaması","Açıklama"),
+        net_sqm=net_sqm,details=detail_map,
     )
 
 def is_valid_detail_listing(platform:str,text:str,item:Listing|None,expected_url:str)->bool:
@@ -397,6 +478,37 @@ ROW_MARK_JS = r"""() => {
     bodyLength:(document.body?.innerText||'').length
   };
   return {candidates,diagnostics};
+}"""
+
+DETAIL_ATTRIBUTES_JS = r"""() => {
+  const pairs=[];
+  const clean=value=>String(value||'').replace(/\s+/g,' ').trim();
+  const blocked=element=>Boolean(element.closest('nav,header,footer,aside,[role="navigation"]'));
+  const add=(label,value)=>{
+    label=clean(label); value=clean(value);
+    if(label && value && label.length<=80 && value.length<=3000) pairs.push({label,value});
+  };
+  for(const row of document.querySelectorAll('table tr')){
+    if(blocked(row)) continue;
+    const cells=Array.from(row.querySelectorAll(':scope > th,:scope > td')).map(x=>clean(x.innerText||x.textContent));
+    if(cells.length>=2) add(cells[0],cells.slice(1).join(' '));
+  }
+  for(const label of document.querySelectorAll('dt')){
+    if(blocked(label)) continue;
+    const value=label.nextElementSibling;
+    if(value && value.matches('dd')) add(label.innerText||label.textContent,value.innerText||value.textContent);
+  }
+  const selectors='[class*="feature"] li,[class*="spec"] li,[class*="detail"] li,[class*="info"] li';
+  for(const item of document.querySelectorAll(selectors)){
+    if(blocked(item)) continue;
+    const direct=Array.from(item.children).map(x=>clean(x.innerText||x.textContent)).filter(Boolean);
+    if(direct.length>=2) add(direct[0],direct.slice(1).join(' '));
+    else {
+      const lines=String(item.innerText||'').split('\n').map(clean).filter(Boolean);
+      if(lines.length>=2) add(lines[0],lines.slice(1).join(' '));
+    }
+  }
+  return pairs;
 }"""
 
 
@@ -577,6 +689,18 @@ class PlaywrightScanner(QObject):
                 pass
         return ""
 
+    def _read_detail_attributes(self,page) -> dict[str,str]:
+        try:
+            return normalize_detail_pairs(page.evaluate(DETAIL_ATTRIBUTES_JS) or [])
+        except Exception:
+            return {}
+
+    def _read_description(self,page) -> str:
+        return self._first_text(page,[
+            "#classifiedDescription",".classifiedDescription",'[data-testid="description"]',
+            '[class*="description"] [class*="content"]',
+        ])
+
     def _read_detail(self, page, source_url: str) -> tuple[Listing | None,str]:
         page.wait_for_timeout(800)
         if not self._ensure_not_blocked(page):
@@ -598,7 +722,10 @@ class PlaywrightScanner(QObject):
                     if tel.count(): phone = (tel.first.get_attribute("href") or "").removeprefix("tel:").strip()
             except Exception: pass
         body = self._body_text(page)
-        item=parse_listing_detail(text=body, url=page.url, source_url=source_url, title=title, price=price, advisor=advisor, phone=phone)
+        details=self._read_detail_attributes(page)
+        description=self._read_description(page)
+        if description: details.setdefault("İlan Açıklaması",description)
+        item=parse_listing_detail(text=body, url=page.url, source_url=source_url, title=title, price=price, advisor=advisor, phone=phone,details=details)
         return item,body
 
     def _go_back_to_list(self, page, list_url: str) -> None:
@@ -731,7 +858,10 @@ class PlaywrightScanner(QObject):
             page.goto(url,wait_until="domcontentloaded",timeout=90000); page.wait_for_timeout(900)
             if not self._ensure_not_blocked(page): break
             text=self._body_text(page)
-            item=parse_remax_detail(text=text,url=page.url,source_url=source_url)
+            details=self._read_detail_attributes(page)
+            description=self._read_description(page)
+            if description: details.setdefault("İlan Açıklaması",description)
+            item=parse_remax_detail(text=text,url=page.url,source_url=source_url,details=details)
             if not is_valid_detail_listing("remax",text,item,url):
                 raise RuntimeError(f"MyRE/MAX ilan ayrıntısı doğrulanamadı ({i}/{len(all_links)}). Eski ilanlar korundu.")
             if item.listing_id not in seen_ids:
@@ -775,7 +905,12 @@ class PlaywrightScanner(QObject):
             except Exception:
                 profile_links=[]
             advisor=extract_emlakjet_advisor(profile_links)
-            item=parse_emlakjet_detail(text=text,url=page.url,source_url=source_url,title=title,advisor=advisor)
+            details=self._read_detail_attributes(page)
+            description=self._read_description(page)
+            if description: details.setdefault("İlan Açıklaması",description)
+            item=parse_emlakjet_detail(
+                text=text,url=page.url,source_url=source_url,title=title,advisor=advisor,details=details
+            )
             if not is_valid_detail_listing("emlakjet",text,item,listing_url):
                 raise RuntimeError(f"Emlakjet ilan ayrıntısı doğrulanamadı ({i}/{len(all_links)}). Eski ilanlar korundu.")
             if item.listing_id not in seen_ids:

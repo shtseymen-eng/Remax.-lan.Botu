@@ -329,3 +329,19 @@ def test_shutdown_cancels_browser_startup_and_finishes_the_worker():
     bot.shutdown()
 
     assert bot._thread.is_alive() is False
+
+
+def test_conversation_loop_accepts_a_custom_command_prefix():
+    from remax_bot.whatsapp_webengine import max_intro
+
+    runtime = load_runtime()
+    session=FakeWhatsAppSession([
+        snapshot(),
+        snapshot({"id":"start","text":"!Max başla"}),
+    ])
+    loop=runtime.WhatsAppConversationLoop(lambda _text:"yanıt",session,command_prefix="!")
+
+    loop.tick()
+    loop.tick()
+
+    assert session.sent == [max_intro("!")]

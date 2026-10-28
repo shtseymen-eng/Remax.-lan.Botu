@@ -222,3 +222,60 @@ def test_invalid_saved_source_uses_safe_myremax_default():
 
     assert 'https://x/1' in response
     assert 'https://x/2' not in response
+
+
+def test_custom_command_prefix_accepts_only_the_saved_prefix():
+    assert parse_command("!izmit kiralık",prefix="!")["type"] == "search"
+    assert parse_command("#izmit kiralık",prefix="!")["type"] == "ignore"
+    help_text=command_help(prefix="!")
+    assert "!?" in help_text
+    assert "!danışmanlar" in help_text
+    assert "#danışmanlar" not in help_text
+
+
+def test_search_sources_and_fields_limit_normal_search_but_not_advisor_counts():
+    rows=[
+        Listing(
+            "S1","Sahibinden Daire","https://www.sahibinden.com/ilan/s-12345678/detay",
+            advisor="Ayşe Yılmaz",description="deniz manzaralı",
+            source_url="https://carsigayrimenkulkocaeli.sahibinden.com/",
+        ),
+        Listing(
+            "R1","MyREMAX Daire","https://remax.com.tr/tr/portfoy/P12345678",
+            advisor="Ayşe Yılmaz",description="deniz manzaralı",
+            source_url="https://remax.com.tr/tr/ofis/detay/carsi",
+        ),
+    ]
+
+    sahibinden=command_response(
+        rows,"!deniz",prefix="!",search_sources=["Sahibinden"],search_fields=["description"]
+    )
+    assert "Sahibinden Daire" in sahibinden
+    assert "MyREMAX Daire" not in sahibinden
+    assert "uygun ilan bulunamadı" in command_response(
+        rows,"!deniz",prefix="!",search_sources=["Sahibinden"],search_fields=["title"]
+    )
+    advisor_response=command_response(
+        rows,"!danışmanlar",prefix="!",search_sources=["Sahibinden"],search_fields=["title"]
+    )
+    assert "MyRE/MAX: 1" in advisor_response
+    assert "Sahibinden: 1" in advisor_response
+
+
+def test_relevance_prefers_title_and_address_over_description_matches():
+    rows=[
+        Listing("1","Başka Bölge","https://x/1",description="yahya kaptan yakınında",source_url="manual://one"),
+        Listing("2","Yahya Kaptan Satılık Daire","https://x/2",source_url="manual://two"),
+        Listing("3","Satılık Daire","https://x/3",province="Kocaeli",district="İzmit",neighborhood="Yahya Kaptan",source_url="manual://three"),
+    ]
+
+    response=command_response(rows,"#yahya kaptan",search_fields=["title","location","description"])
+
+    assert response.index("Yahya Kaptan Satılık Daire") < response.index("Başka Bölge")
+    assert response.index("https://x/3") < response.index("https://x/1")
+
+
+def test_search_result_always_contains_the_link_without_link_or_ilan_words():
+    row=Listing("1","Kiralık Daire","https://example.test/ilan/1",location="İzmit")
+    response=command_response([row],"#izmit kiralık")
+    assert "https://example.test/ilan/1" in response

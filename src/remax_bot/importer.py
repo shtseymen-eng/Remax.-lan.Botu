@@ -2,7 +2,14 @@ from __future__ import annotations
 import csv, re
 from pathlib import Path
 from .core import Listing, norm, source_site, listing_identity
-from .listing_details import normalize_details
+from .listing_details import details_text, display_address, normalize_details
+from .settings_schema import (
+    DEFAULT_SEARCH_FIELDS,
+    DEFAULT_SEARCH_SOURCES,
+    normalize_command_prefix,
+    normalize_search_fields,
+    normalize_search_sources,
+)
 
 FIELD_ALIASES={
  "listing_id":["ilan no","ilan numarasi","portfoy no","portfoy numarasi","id"],
@@ -218,72 +225,74 @@ def filter_listings(items,advisor="",transaction="",property_type="",location=""
         from .core import search
         rows=search(rows,query)
     return rows
-def command_help():
-    return """RE/MAX ÇARŞI İLAN BOTU KOMUTLARI
+def command_help(prefix="#"):
+    p=normalize_command_prefix(prefix)
+    return f"""RE/MAX ÇARŞI İLAN BOTU KOMUTLARI
 
-#Max başla / #Max başlat
+{p}Max başla / {p}Max başlat
 Max ilan arama botunu aktif eder.
 
-#Max durdur
+{p}Max durdur
 Max ilan arama botunu durdurur.
 
-#?
+{p}?
 Komut listesini gösterir.
 
-#danışmanlar
+{p}danışmanlar
 Gerçek danışmanları mevcut ilan adetleriyle listeler.
 
-#yahya kaptan kiralık 3+1
+{p}yahya kaptan kiralık 3+1
 Uygun ilanların linklerini danışman adıyla gönderir.
 
-#yahya kaptan kiralık 3+1 link
+{p}yahya kaptan kiralık 3+1 link
 Eski kullanım biçimidir; link kelimesi artık zorunlu değildir.
 
-#izmit kiralık dükkan-ofis
+{p}izmit kiralık dükkan-ofis
 Dükkan veya ofis türündeki kiralık ilanların linklerini gönderir.
 
-#izmit satılık ev-daire
+{p}izmit satılık ev-daire
 Ev veya daire türündeki satılık ilanların linklerini gönderir.
 
-#izmit kiralık 55 bin
+{p}izmit kiralık 55 bin
 55.000 TL ve altındaki uygun ilanları linkleriyle gönderir.
 
-#izmit satılık daire 4 milyon
+{p}izmit satılık daire 4 milyon
 4.000.000 TL ve altındaki uygun ilanları linkleriyle gönderir.
 
-#danışman ayşe
+{p}danışman ayşe
 Danışman adına göre ilanları bulur.
 
-#emlakjet izmit kiralık
+{p}emlakjet izmit kiralık
 Yalnızca Emlakjet listesindeki uygun ilanların linklerini gönderir.
 
-#sahibinden izmit satılık
+{p}sahibinden izmit satılık
 Yalnızca Sahibinden listesindeki uygun ilanların linklerini gönderir.
 
-#myremax yahya kaptan kiralık
+{p}myremax yahya kaptan kiralık
 Yalnızca MyRE/MAX listesindeki uygun ilanların linklerini gönderir.
 
 Komutta site adı yoksa Ayarlar bölümünde kayıtlı ilan linki kaynağı kullanılır.
-#danışmanlar komutu her zaman üç sitenin tamamını sayar.
+{p}danışmanlar komutu her zaman üç sitenin tamamını sayar.
 İlan aramalarında link kelimesi yazmanız gerekmez; sonuçlar doğrudan linkleriyle gönderilir.
 
 Komutun yalnızca başında # olması yeterlidir.
-Eski #komut# biçimi de desteklenir.
+Eski {p}komut{p} biçimi de desteklenir.
 
 Eski biçim örnekleri:
-#danışmanlar#
-#yahya kaptan kiralık 3+1#
-#izmit kiralık 55 bin#
-#izmit satılık daire 4 milyon#"""
-def _command_body(text):
+{p}danışmanlar{p}
+{p}yahya kaptan kiralık 3+1{p}
+{p}izmit kiralık 55 bin{p}
+{p}izmit satılık daire 4 milyon{p}""".replace("Komutun yalnızca başında #",f"Komutun yalnızca başında {p}")
+def _command_body(text,prefix="#"):
+    p=normalize_command_prefix(prefix)
     t=(text or "").strip()
-    if t=="#?": return "?",True
-    if len(t)<2 or not t.startswith("#"): return "",False
+    if t==p+"?": return "?",True
+    if len(t)<2 or not t.startswith(p): return "",False
     body=t[1:]
-    if body.endswith("#"): body=body[:-1]
+    if body.endswith(p): body=body[:-1]
     return body.strip(),True
-def parse_command(text):
-    body,ok=_command_body(text)
+def parse_command(text,prefix="#"):
+    body,ok=_command_body(text,prefix)
     if not ok:return {"type":"ignore"}
     if body=="?":return {"type":"help"}
     if not body:return {"type":"ignore"}
@@ -309,11 +318,37 @@ def parse_command(text):
             raw=direct[-1].group(0); target=int(re.sub(r"[^0-9]","",raw))
             body=(body[:direct[-1].start()]+" "+body[direct[-1].end():]).strip()
     return {"type":"search","query":body,"links":link,"target_price":target,"source":source}
-def command_response(items,text,limit=12,link_source=None):
+def _relevance_score(item,query,fields):
+    selected=set(fields)
+    values={
+        "title":item.title,
+        "advisor":item.advisor,
+        "location":" ".join([
+            item.location,item.province,item.district,item.neighborhood,item.street,
+            item.complex_name,item.full_address,
+        ]),
+        "phone":item.phone,"price":item.price,"rooms":item.rooms,
+        "transaction_type":item.transaction_type,"property_type":item.property_type,
+        "sqm":" ".join([item.sqm,item.net_sqm]),"listing_date":item.listing_date,
+        "description":item.description,"details":details_text(item.details),
+    }
+    weights={"location":8,"title":7,"advisor":7,"rooms":4,"transaction_type":4,"property_type":4}
+    tokens=[token for token in norm(query).split() if token]
+    score=0
+    normalized_query=norm(query)
+    for name,value in values.items():
+        if name not in selected: continue
+        hay=norm(value); weight=weights.get(name,1)
+        score+=sum(weight for token in tokens if token in hay)
+        if normalized_query and normalized_query in hay: score+=weight*4
+    return score
+
+def command_response(items,text,limit=12,link_source=None,prefix="#",search_sources=None,search_fields=None):
     from .core import search
-    cmd=parse_command(text)
+    p=normalize_command_prefix(prefix)
+    cmd=parse_command(text,prefix=p)
     if cmd["type"]=="ignore":return None
-    if cmd["type"]=="help":return command_help()
+    if cmd["type"]=="help":return command_help(prefix=p)
     if cmd["type"]=="advisors":
         unique_rows={}
         for x in items:
@@ -351,27 +386,36 @@ def command_response(items,text,limit=12,link_source=None):
             lines.append("")
         lines += ["",f"Toplam ilan: {len(unique_rows)}",f"Toplam danışman: {len(groups)}"]
         return "\n".join(lines)
-    configured_source=(
-        link_source if link_source in LINK_SOURCES
-        else ("MyRE/MAX" if link_source is not None else None)
-    )
-    selected_source=cmd.get("source") or configured_source
+    configured_source=(link_source if link_source in LINK_SOURCES else ("MyRE/MAX" if link_source is not None else None))
+    allowed_sources=None if search_sources is None else set(normalize_search_sources(search_sources))
+    requested_source=cmd.get("source")
+    selected_source=requested_source or (configured_source if allowed_sources is None else None)
     searchable=list(items)
-    if selected_source:
+    if requested_source and allowed_sources is not None and requested_source not in allowed_sources:
+        searchable=[]
+    elif selected_source:
         searchable=[x for x in searchable if source_site(x.source_url,x.url)==selected_source]
-    matches=search(searchable,cmd.get("query","")); target=cmd.get("target_price")
+    elif allowed_sources is not None:
+        searchable=[x for x in searchable if source_site(x.source_url,x.url) in allowed_sources]
+    fields=normalize_search_fields(search_fields) if search_fields is not None else list(DEFAULT_SEARCH_FIELDS)
+    query=cmd.get("query","")
+    matches=search(searchable,query,fields=fields)
+    matches=sorted(matches,key=lambda item:(-_relevance_score(item,query,fields),norm(item.title),str(item.listing_id)))
+    target=cmd.get("target_price")
     if target is not None:
         priced=[(price_number(x.price),x) for x in matches]; priced=[p for p in priced if p[0] is not None and p[0]<=target]
         matches=[x for _,x in sorted(priced,key=lambda p:p[0],reverse=True)]
     if not matches:
         if selected_source:return f"{selected_source} listesinde aramanıza uygun ilan bulunamadı."
+        if allowed_sources is not None:return "Seçili kaynaklarda aramanıza uygun ilan bulunamadı."
         if target is not None:return f"{target:,.0f} TL ve altında aramanıza uygun ilan bulunamadı.".replace(",",".")
         return "Aramanıza uygun ilan bulunamadı."
     if cmd.get("links") or target is not None:
         lines=[f"{target:,.0f} TL ve altında {len(matches)} uygun ilan bulundu:".replace(",",".")] if target is not None else [f"{len(matches)} uygun ilan bulundu:"]
         for x in (matches if target is not None else matches[:limit]):
             advisor=advisor_display_name(x.advisor)
-            lines += ["",x.title,f"{x.price} | {x.location}",f"Danışman: {advisor}",x.url or "(link yok)"]
+            address=display_address(x) or x.location
+            lines += ["",x.title,f"{x.price} | {address}",f"Danışman: {advisor}",x.url or "(link yok)"]
         return "\n".join(lines)
     by={}
     for x in matches:

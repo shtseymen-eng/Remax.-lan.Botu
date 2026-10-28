@@ -37,6 +37,7 @@ def test_normalize_details_cleans_whitespace_and_drops_empty_entries():
         "Otopark": "Açık",
     }
     assert normalize_details("{bozuk") == {}
+    assert normalize_details({"Bina Yaşı": 0}) == {"Bina Yaşı": "0"}
 
 
 def test_search_uses_description_and_dynamic_details_only_when_enabled():

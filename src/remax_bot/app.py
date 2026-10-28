@@ -278,19 +278,20 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         wh.addWidget(info)
         wal.addLayout(wh)
 
-        chrome_info=QLabel(
+        prefix=self.settings.get('command_prefix','#')
+        self.chrome_info=QLabel(
             'Google Chrome otomatik açılır. İlk kullanımda QR kodunu bir kez okutun; '
             'oturum daha sonraki açılışlarda korunur. Chrome penceresinde hedef sohbeti '
             'açık bırakabilirsiniz. Max hem sizin hem de diğer grup üyelerinin yeni '
-            '# komutlarını okuyup aynı sohbette yanıtlar.'
+            f'{prefix} komutlarını okuyup aynı sohbette yanıtlar.'
         )
-        chrome_info.setWordWrap(True)
-        chrome_info.setAlignment(Qt.AlignCenter)
-        chrome_info.setStyleSheet(
+        self.chrome_info.setWordWrap(True)
+        self.chrome_info.setAlignment(Qt.AlignCenter)
+        self.chrome_info.setStyleSheet(
             f'font-size:16px;font-weight:700;color:{TEXT};padding:45px;'
             f'background:{BG};border:1px solid {BORDER};border-radius:12px'
         )
-        wal.addWidget(chrome_info,1)
+        wal.addWidget(self.chrome_info,1)
 
         show_chrome=QPushButton('WHATSAPP CHROME PENCERESİNİ GÖSTER')
         show_chrome.setObjectName('green')
@@ -600,7 +601,9 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
 
         f=QFormLayout()
         self.group=QLineEdit(self.settings.get('group',''))
-        self.group.setPlaceholderText('Boşsa #Max başla yazılan açık sohbet kullanılır.')
+        self.group.setPlaceholderText(
+            f"Boşsa {self.settings.get('command_prefix','#')}Max başla yazılan açık sohbet kullanılır."
+        )
         self.sound=QCheckBox('Bildirim sesi açık')
         self.sound.setChecked(self.settings.get('sound',True))
         self.days=QSpinBox()
@@ -979,6 +982,13 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.commandlist.setPlainText(command_help(prefix=prefix))
         self.quick_cmd.setPlaceholderText(f'{prefix}Max başla / {prefix}? / {prefix}danışmanlar / {prefix}izmit kiralık 55 bin')
         self.quick_result.setPlainText(f'Komutun yalnızca başında {prefix} olması yeterlidir.')
+        self.group.setPlaceholderText(f'Boşsa {prefix}Max başla yazılan açık sohbet kullanılır.')
+        self.chrome_info.setText(
+            'Google Chrome otomatik açılır. İlk kullanımda QR kodunu bir kez okutun; '
+            'oturum daha sonraki açılışlarda korunur. Chrome penceresinde hedef sohbeti '
+            'açık bırakabilirsiniz. Max hem sizin hem de diğer grup üyelerinin yeni '
+            f'{prefix} komutlarını okuyup aynı sohbette yanıtlar.'
+        )
         self.refresh()
 
     def refresh_advisor_merge_list(self,*_args):
@@ -1062,9 +1072,8 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
 
     def scan_failed(self,msg):
         self.scanstatus.setText(msg)
-        automatic=self.auto_scan_queue.current is not None
         self._complete_current_scan(False)
-        if not automatic:QMessageBox.warning(self,'Tarama',msg)
+        QMessageBox.warning(self,'Tarama',msg)
 
     def scan_done(self,source,rows):
         try:

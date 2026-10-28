@@ -38,6 +38,18 @@ def test_listing_filter_combines_advisor_and_price():
     assert [item.listing_id for item in rows] == ["1"]
 
 
+def test_location_filter_uses_structured_address_fields():
+    rows=[
+        Listing(
+            "A1","Satılık Daire","https://x/structured",
+            province="Kocaeli",district="Başiskele",neighborhood="Fatih Mahallesi",
+        ),
+        Listing("A2","Satılık Daire","https://x/other",location="Kocaeli / İzmit"),
+    ]
+
+    assert [item.listing_id for item in importer.filter_listings(rows,location="Fatih")] == ["A1"]
+
+
 def test_max_settings_defaults_cover_every_platform_and_detail_group():
     from remax_bot.settings_schema import (
         DEFAULT_SEARCH_FIELDS,

@@ -149,6 +149,10 @@ DETAIL_JS = r'''(() => {
 ''' + DEEP_HELPERS + r'''
   const text=deepText();
   const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
+  const withSqm=value=>{const v=clean(value);return !v?'':/m(?:²|2)/i.test(v)?v:v+' m²';};
+  const provinces=new Set(
+    'adana|adıyaman|afyonkarahisar|ağrı|aksaray|amasya|ankara|antalya|ardahan|artvin|aydın|balıkesir|bartın|batman|bayburt|bilecik|bingöl|bitlis|bolu|burdur|bursa|çanakkale|çankırı|çorum|denizli|diyarbakır|düzce|edirne|elazığ|erzincan|erzurum|eskişehir|gaziantep|giresun|gümüşhane|hakkari|hatay|ığdır|ısparta|istanbul|izmir|kahramanmaraş|karabük|karaman|kars|kastamonu|kayseri|kilis|kırıkkale|kırklareli|kırşehir|kocaeli|konya|kütahya|malatya|manisa|mardin|mersin|muğla|muş|nevşehir|niğde|ordu|osmaniye|rize|sakarya|samsun|şanlıurfa|siirt|sinop|şırnak|sivas|tekirdağ|tokat|trabzon|tunceli|uşak|van|yalova|yozgat|zonguldak'.split('|')
+  );
   const lines=text.split('\n').map(x=>x.trim()).filter(Boolean);
   function afterLabel(label){
     const n=label.toLocaleLowerCase('tr-TR');
@@ -187,7 +191,7 @@ DETAIL_JS = r'''(() => {
   let neighborhood=afterLabel('Mahalle')||afterLabel('Semt');
   if(li>0 && (!province||!district||!neighborhood)){
     const crumbs=lines.slice(Math.max(0,li-6),li).filter(x=>x!==title&&x!=='İlan Detayı'&&!/(?:₺|TL)/i.test(x)).slice(-3);
-    if(crumbs.length>=2){province=province||crumbs[0];district=district||crumbs[1];if(crumbs.length>=3)neighborhood=neighborhood||crumbs[2];}
+    if(crumbs.length>=2&&provinces.has(clean(crumbs[0]).toLocaleLowerCase('tr-TR'))){province=province||crumbs[0];district=district||crumbs[1];if(crumbs.length>=3)neighborhood=neighborhood||crumbs[2];}
   }
   const street=afterLabel('Sokak/Cadde')||afterLabel('Sokak')||afterLabel('Cadde');
   const complexName=afterLabel('Site/Proje')||afterLabel('Site Adı')||afterLabel('Proje Adı');
@@ -234,10 +238,10 @@ DETAIL_JS = r'''(() => {
   }
 
   return {url:location.href,listingId:clean(listingId),title:clean(title),price,location:locationText,rooms,
-          transaction,propertyType,sqm:gross?clean(gross)+' m²':'',listingDate:clean(date),advisor:clean(advisor),phone:clean(phone),
+          transaction,propertyType,sqm:withSqm(gross),listingDate:clean(date),advisor:clean(advisor),phone:clean(phone),
           province:clean(province),district:clean(district),neighborhood:clean(neighborhood),street:clean(street),
           complexName:clean(complexName),fullAddress:clean(fullAddress),description:clean(description),
-          netSqm:netSqm?clean(netSqm)+' m²':'',details,
+          netSqm:withSqm(netSqm),details,
           textLength:text.length,rootCount:deepRoots().length};
 })()'''
 

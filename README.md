@@ -75,7 +75,7 @@ Sahibinden, Emlakjet veya MyRE/MAX kaynağını seçip **VERİLERİ EXCEL'E AKTA
 
 Danışman yazım farklılıklarını düzeltmek için **Ayarlar > Danışman İsimlerini Birleştir** alanında isimleri işaretleyin, kullanılacak ana ismi seçin veya yazın ve **BİRLEŞTİR VE GÜNCELLE** düğmesine basın. Sadece işaretlenen isimler birleşir; kural sonraki tarama ve yüklemelere de uygulanır. Aynı alandan birleştirmeyi kaldırabilirsiniz.
 
-Grup adı boş bırakılırsa Max, `#Max başla` veya `#Max başlat` komutunun görüldüğü açık sohbete kilitlenir. Ayarlarda grup adı varsa o grup önceliklidir ve diğer sohbetlerdeki komutlar yok sayılır.
+Grup adı boş bırakılırsa Max, Ayarlar'da seçilen işaretle yazılan `Max başla` veya `Max başlat` komutunun görüldüğü açık sohbete kilitlenir. Ayarlarda grup adı varsa o grup önceliklidir ve diğer sohbetlerdeki komutlar yok sayılır.
 
 ## Test
 

@@ -28,3 +28,17 @@ def test_embedded_detail_payload_includes_address_and_extra_details():
     s=scanner_text()
     for token in ['province','district','neighborhood','street','complexName','fullAddress','description','netSqm','details']:
         assert token in s
+
+
+def test_embedded_detail_payload_does_not_duplicate_square_meter_units():
+    s=scanner_text()
+
+    assert 'const withSqm=' in s
+    assert "sqm:withSqm(gross)" in s
+    assert "netSqm:withSqm(netSqm)" in s
+
+
+def test_embedded_remax_address_fallback_requires_a_real_province():
+    s=scanner_text()
+
+    assert "provinces.has" in s

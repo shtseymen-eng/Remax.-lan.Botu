@@ -89,6 +89,8 @@ def test_saved_max_search_settings_are_used_by_whatsapp_and_bot_test():
     assert "search_sources=self.settings.get('search_sources')" in home
     assert "search_fields=self.settings.get('search_fields')" in home
     assert "prefix=self.settings.get('command_prefix','#')" in home
+    assert "self.chrome_info.setText" in save
+    assert "{prefix} komutlarını" in APP
     assert "search_sources=self.settings.get('search_sources')" in bot_test
     assert "self.wabot.set_command_prefix" in save
 
@@ -112,3 +114,10 @@ def test_import_success_can_start_the_selected_automatic_scan_queue():
     assert "def _scan_next_queued_source(self):" in scan_logic
     assert "def _complete_current_scan(self,success):" in scan_logic
     assert "self.sc.start(url)" in scan_logic
+
+
+def test_automatic_scan_failure_remains_visible_to_the_user():
+    failed = APP[APP.index("    def scan_failed(self,msg):"):APP.index("    def scan_done(self,source,rows):")]
+
+    assert "QMessageBox.warning(self,'Tarama',msg)" in failed
+    assert "if not automatic" not in failed

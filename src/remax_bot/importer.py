@@ -70,7 +70,7 @@ def _map_headers(headers):
                 out[field]=nh[_h(a)]; break
     return out
 def _row_to_listing(row,mapping,default_source="excel://import"):
-    g=lambda f: str(row.get(mapping.get(f,""),"") or "").strip()
+    g=lambda f: "" if row.get(mapping.get(f,""),"") is None else str(row.get(mapping.get(f,""),"")).strip()
     url=g("url"); lid=g("listing_id")
     if not lid:
         m=re.search(r"(?:P)?(\d{5,})",url)
@@ -79,7 +79,7 @@ def _row_to_listing(row,mapping,default_source="excel://import"):
     mapped_headers=set(mapping.values())
     details=normalize_details({
         str(header):value for header,value in row.items()
-        if header not in mapped_headers and str(header or "").strip() and str(value or "").strip()
+        if header not in mapped_headers and str(header or "").strip() and value is not None and str(value).strip()
     })
     return Listing(
         listing_id=lid,title=g("title") or f"İlan {lid}",url=url,advisor=g("advisor"),
@@ -117,7 +117,11 @@ def _export_headers(items):
 
 def _export_row(item,headers):
     row={header:getattr(item,field) for field,header in FIXED_EXPORT_FIELDS}
-    row.update(normalize_details(item.details))
+    fixed_keys={_h(header) for _field,header in FIXED_EXPORT_FIELDS}
+    row.update({
+        key:value for key,value in normalize_details(item.details).items()
+        if _h(key) not in fixed_keys
+    })
     return [row.get(header,"") for header in headers]
 
 def _style_xlsx_headers(ws,headers):
@@ -218,7 +222,14 @@ def filter_listings(items,advisor="",transaction="",property_type="",location=""
     if advisor: rows=[x for x in rows if norm(x.advisor)==norm(advisor)]
     if transaction: rows=[x for x in rows if norm(transaction) in norm(x.transaction_type)]
     if property_type: rows=[x for x in rows if norm(property_type) in norm(x.property_type)]
-    if location: rows=[x for x in rows if norm(location) in norm(x.location)]
+    if location:
+        rows=[
+            x for x in rows
+            if norm(location) in norm(" ".join([
+                x.location,x.province,x.district,x.neighborhood,x.street,
+                x.complex_name,x.full_address,
+            ]))
+        ]
     if min_price is not None: rows=[x for x in rows if price_number(x.price) is not None and price_number(x.price)>=int(min_price)]
     if max_price is not None: rows=[x for x in rows if price_number(x.price) is not None and price_number(x.price)<=int(max_price)]
     if query:
@@ -271,7 +282,7 @@ Yalnızca Sahibinden listesindeki uygun ilanların linklerini gönderir.
 {p}myremax yahya kaptan kiralık
 Yalnızca MyRE/MAX listesindeki uygun ilanların linklerini gönderir.
 
-Komutta site adı yoksa Ayarlar bölümünde kayıtlı ilan linki kaynağı kullanılır.
+Komutta site adı yoksa Ayarlar bölümünde seçilen kaynaklar kullanılır.
 {p}danışmanlar komutu her zaman üç sitenin tamamını sayar.
 İlan aramalarında link kelimesi yazmanız gerekmez; sonuçlar doğrudan linkleriyle gönderilir.
 

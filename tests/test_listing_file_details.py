@@ -1,6 +1,6 @@
 import csv
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from remax_bot.core import Listing
 from remax_bot.importer import read_list_file, write_ai_template, write_list_file
@@ -63,6 +63,20 @@ def test_csv_round_trip_preserves_turkish_text_and_dynamic_details(tmp_path):
     assert_detailed_listing(item)
 
 
+def test_fixed_fields_are_not_overwritten_by_duplicate_dynamic_labels(tmp_path):
+    path=tmp_path / "canonical-wins.csv"
+    item=Listing(
+        "1","Daire","https://www.sahibinden.com/ilan/x-1234567898/detay",
+        province="Kocaeli",details={"İl":"Eski İl","Isıtma":"Kombi"},
+    )
+
+    write_list_file(path,[item])
+    [recovered]=read_list_file(path)
+
+    assert recovered.province == "Kocaeli"
+    assert recovered.details == {"Isıtma":"Kombi"}
+
+
 def test_unknown_nonempty_columns_are_imported_as_details_and_blank_columns_are_ignored(tmp_path):
     path = tmp_path / "ai.csv"
     with path.open("w", encoding="utf-8-sig", newline="") as stream:
@@ -100,6 +114,19 @@ def test_unknown_nonempty_columns_are_imported_as_details_and_blank_columns_are_
     assert item.district == "İzmit"
     assert item.neighborhood == "Yahya Kaptan"
     assert item.details == {"Isıtma": "Yerden Isıtma", "Bulunduğu Kat": "Ara Kat"}
+
+
+def test_xlsx_import_preserves_numeric_zero_detail_values(tmp_path):
+    path=tmp_path / "zero-detail.xlsx"
+    workbook=Workbook()
+    sheet=workbook.active
+    sheet.append(["İlan Linki","Bina Yaşı"])
+    sheet.append(["https://www.sahibinden.com/ilan/x-1234567899/detay",0])
+    workbook.save(path)
+
+    [item]=read_list_file(path)
+
+    assert item.details == {"Bina Yaşı":"0"}
 
 
 def test_old_bolge_column_still_populates_legacy_location(tmp_path):

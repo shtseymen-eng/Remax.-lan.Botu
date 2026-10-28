@@ -5,7 +5,7 @@ from collections.abc import Mapping
 
 
 def _clean(value) -> str:
-    return " ".join(str(value or "").split())
+    return "" if value is None else " ".join(str(value).split())
 
 
 def normalize_details(value) -> dict[str, str]:

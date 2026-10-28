@@ -23,6 +23,22 @@ from .importer import is_valid_advisor
 from .listing_details import normalize_details
 
 MONTHS = "Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık"
+TURKEY_PROVINCES={
+    norm(name) for name in (
+        "Adana","Adıyaman","Afyonkarahisar","Ağrı","Aksaray","Amasya","Ankara",
+        "Antalya","Ardahan","Artvin","Aydın","Balıkesir","Bartın","Batman",
+        "Bayburt","Bilecik","Bingöl","Bitlis","Bolu","Burdur","Bursa","Çanakkale",
+        "Çankırı","Çorum","Denizli","Diyarbakır","Düzce","Edirne","Elazığ",
+        "Erzincan","Erzurum","Eskişehir","Gaziantep","Giresun","Gümüşhane",
+        "Hakkari","Hatay","Iğdır","Isparta","İstanbul","İzmir","Kahramanmaraş",
+        "Karabük","Karaman","Kars","Kastamonu","Kayseri","Kilis","Kırıkkale",
+        "Kırklareli","Kırşehir","Kocaeli","Konya","Kütahya","Malatya","Manisa",
+        "Mardin","Mersin","Muğla","Muş","Nevşehir","Niğde","Ordu","Osmaniye",
+        "Rize","Sakarya","Samsun","Şanlıurfa","Siirt","Sinop","Şırnak","Sivas",
+        "Tekirdağ","Tokat","Trabzon","Tunceli","Uşak","Van","Yalova","Yozgat",
+        "Zonguldak",
+    )
+}
 
 
 def browser_launch_options() -> dict:
@@ -140,7 +156,11 @@ def _sqm_value(value:str)->str:
 def _slash_location_parts(text:str)->tuple[str,str,str]:
     for line in (text or "").splitlines():
         parts=[" ".join(part.split()) for part in line.split("/")]
-        if 2<=len(parts)<=4 and all(part and not re.search(r"\d",part) for part in parts[:3]):
+        if (
+            2<=len(parts)<=4
+            and norm(parts[0]) in TURKEY_PROVINCES
+            and all(part and not re.search(r"\d",part) for part in parts[:3])
+        ):
             return tuple((parts+["",""])[:3])
     return "","",""
 
@@ -203,7 +223,7 @@ def parse_remax_detail(*, text: str, url: str, source_url: str, details=None) ->
             line for line in lines[max(0,portfolio_index-6):portfolio_index]
             if line not in {title,"İlan Detayı"} and not re.search(r"(?:₺|TL)",line,re.I)
         ][-3:]
-        if len(breadcrumb)>=2:
+        if len(breadcrumb)>=2 and norm(breadcrumb[0]) in TURKEY_PROVINCES:
             province=province or breadcrumb[0]
             district=district or breadcrumb[1]
             if len(breadcrumb)>=3: neighborhood=neighborhood or breadcrumb[2]

@@ -206,6 +206,20 @@ def test_missing_address_components_stay_empty():
     assert item.full_address == ''
 
 
+def test_property_taxonomy_is_not_invented_as_an_address():
+    item=parse_listing_detail(
+        text='İlan No: 1234567894\nEmlak / Konut / Satılık\nSatılık Daire',
+        url='https://www.sahibinden.com/ilan/x-1234567894/detay',
+        source_url='https://carsigayrimenkulkocaeli.sahibinden.com/',
+        title='Satılık Daire',
+    )
+
+    assert item.province == ''
+    assert item.district == ''
+    assert item.neighborhood == ''
+    assert item.location == ''
+
+
 def test_detail_pair_normalization_keeps_first_meaningful_value():
     pairs=[
         {'label':' Isıtma ','value':' Doğalgaz  Kombi '},

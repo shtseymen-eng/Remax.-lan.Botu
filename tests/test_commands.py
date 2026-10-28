@@ -19,6 +19,7 @@ def test_help():
     assert '#myremax yahya kaptan kiralık' in command_help()
     assert '#izmit kiralık dükkan-ofis' in command_help()
     assert 'İlan aramalarında link kelimesi yazmanız gerekmez' in command_help()
+    assert 'Ayarlar bölümünde seçilen kaynaklar kullanılır' in command_help()
 
 def test_ignore_normal_chat():
     assert command_response(items(),'merhaba') is None

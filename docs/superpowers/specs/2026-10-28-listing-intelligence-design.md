@@ -112,7 +112,7 @@ Seçilmeyen alanlar veya kaynaklar silinmez; yalnızca Max'in normal aramasına 
 
 ## WhatsApp Güvenliği ve Geriye Uyumluluk
 
-WhatsApp Web'i okuyan DOM betikleri, sohbet kilidi, geçmişi tekrar işlememe, gönderim kuyruğu, kalıcı Chrome profili ve gönder düğmesi davranışı değişmeyecektir. Yalnızca komut sınıflandırıcısına kaydedilmiş komut işareti verilecektir. Varsayılan ayar `#` olduğundan mevcut kurulum ve komutlar değişmeden çalışır.
+WhatsApp Web'deki mesaj ve sohbet öğelerini bulan DOM yapısı, sohbet kilidi, geçmişi tekrar işlememe, gönderim kuyruğu, kalıcı Chrome profili ve gönder düğmesi davranışı korunacaktır. Sabit `#` ön filtresi yerine dolu mesajlar komut sınıflandırıcısına iletilecek ve sınıflandırıcı kaydedilmiş komut işaretini kullanacaktır. Varsayılan ayar `#` olduğundan mevcut kurulum ve komutlar değişmeden çalışır.
 
 Eski ayar dosyalarında yeni anahtarlar yoksa güvenli varsayılanlar kullanılır. Eski Excel/CSV dosyaları, mevcut SQLite verileri ve manuel ilan girişleri çalışmaya devam eder.
 

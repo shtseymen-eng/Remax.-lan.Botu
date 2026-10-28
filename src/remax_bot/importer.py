@@ -2,6 +2,7 @@ from __future__ import annotations
 import csv, re
 from pathlib import Path
 from .core import Listing, norm, source_site, listing_identity
+from .listing_details import normalize_details
 
 FIELD_ALIASES={
  "listing_id":["ilan no","ilan numarasi","portfoy no","portfoy numarasi","id"],
@@ -9,15 +10,37 @@ FIELD_ALIASES={
  "phone":["telefon","cep telefonu","danisman telefonu","gsm"],
  "title":["baslik","ilan basligi","portfoy basligi","aciklama"],
  "price":["fiyat","ilan fiyati","bedel"],
- "location":["bolge","konum","lokasyon","il ilce mahalle","adres"],
+ "location":["bolge","konum","lokasyon","il ilce mahalle"],
  "rooms":["oda","oda sayisi"],
  "transaction_type":["satilik kiralik","islem tipi","durum","ilan tipi"],
  "property_type":["emlak turu","gayrimenkul turu","kategori","tip"],
- "sqm":["m2","metrekare","brut m2","net m2"],
+ "sqm":["m2","metrekare","brut m2"],
+ "net_sqm":["net m2","net metrekare"],
  "listing_date":["ilan tarihi","tarih","yayin tarihi"],
  "url":["ilan linki","link","url","portfoy linki"],
- "source_url":["kaynak","ofis","kaynak linki"]
+ "source_url":["kaynak","ofis","kaynak linki"],
+ "province":["il","sehir"],
+ "district":["ilce"],
+ "neighborhood":["mahalle","semt"],
+ "street":["sokak/cadde","sokak cadde","sokak","cadde"],
+ "complex_name":["site/proje","site proje","site adi","proje adi"],
+ "full_address":["acik adres","tam adres","adres"],
+ "description":["ilan aciklamasi","detayli aciklama"],
 }
+FIXED_EXPORT_FIELDS=[
+    ("listing_id","İlan No"),("title","Başlık"),("advisor","Danışman"),("phone","Telefon"),
+    ("price","Fiyat"),("location","Bölge"),("province","İl"),("district","İlçe"),
+    ("neighborhood","Mahalle"),("street","Sokak/Cadde"),("complex_name","Site/Proje"),
+    ("full_address","Açık Adres"),("rooms","Oda"),("transaction_type","Satılık Kiralık"),
+    ("property_type","Emlak Türü"),("sqm","Brüt m²"),("net_sqm","Net m²"),
+    ("listing_date","İlan Tarihi"),("description","İlan Açıklaması"),("url","İlan Linki"),
+    ("source_url","Kaynak"),
+]
+COMMON_DETAIL_HEADERS=[
+    "Bina Yaşı","Bulunduğu Kat","Kat Sayısı","Isıtma","Banyo Sayısı","Balkon","Eşyalı",
+    "Kullanım Durumu","Site İçerisinde","Aidat","Tapu Durumu","Krediye Uygun","Takas",
+    "Cephe","Otopark","Asansör",
+]
 NOISE_ADVISOR_TOKENS={
     "portfoy","konum","kocaeli","izmit","detayli","gayrimen","re/max","remax",
     "satilik","kiralik","telefon","iletisim","ada","parsel","mahalle","ilce",
@@ -46,7 +69,19 @@ def _row_to_listing(row,mapping,default_source="excel://import"):
         m=re.search(r"(?:P)?(\d{5,})",url)
         lid=m.group(1) if m else str(abs(hash((g("title"),url,g("advisor")))))
     src=g("source_url") or default_source
-    return Listing(lid,g("title") or f"İlan {lid}",url,g("advisor"),g("phone"),g("price"),g("location"),g("rooms"),g("transaction_type"),g("property_type"),g("sqm"),g("listing_date"),src)
+    mapped_headers=set(mapping.values())
+    details=normalize_details({
+        str(header):value for header,value in row.items()
+        if header not in mapped_headers and str(header or "").strip() and str(value or "").strip()
+    })
+    return Listing(
+        listing_id=lid,title=g("title") or f"İlan {lid}",url=url,advisor=g("advisor"),
+        phone=g("phone"),price=g("price"),location=g("location"),rooms=g("rooms"),
+        transaction_type=g("transaction_type"),property_type=g("property_type"),sqm=g("sqm"),
+        listing_date=g("listing_date"),source_url=src,province=g("province"),district=g("district"),
+        neighborhood=g("neighborhood"),street=g("street"),complex_name=g("complex_name"),
+        full_address=g("full_address"),description=g("description"),net_sqm=g("net_sqm"),details=details,
+    )
 def read_list_file(path):
     path=Path(path); ext=path.suffix.lower(); rows=[]
     if ext==".csv":
@@ -64,35 +99,93 @@ def read_list_file(path):
     if "title" not in mapping and "url" not in mapping: raise ValueError("Başlık veya İlan Linki sütunu bulunamadı.")
     return [_row_to_listing(r,mapping) for r in rows if any(str(v or "").strip() for v in r.values())]
 
+def _export_headers(items):
+    fixed=[header for _field,header in FIXED_EXPORT_FIELDS]
+    fixed_keys={_h(header) for header in fixed}
+    dynamic=sorted({
+        key for item in items for key in normalize_details(item.details)
+        if _h(key) not in fixed_keys
+    },key=lambda value:_h(value))
+    return fixed+dynamic
+
+def _export_row(item,headers):
+    row={header:getattr(item,field) for field,header in FIXED_EXPORT_FIELDS}
+    row.update(normalize_details(item.details))
+    return [row.get(header,"") for header in headers]
+
+def _style_xlsx_headers(ws,headers):
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment,Font,PatternFill
+    from openpyxl.utils import get_column_letter
+
+    for cell in ws[1]:
+        cell.font=Font(color="FFFFFF",bold=True)
+        cell.fill=PatternFill("solid",fgColor="0B4DB8")
+        cell.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
+    widths={
+        "İlan No":14,"Başlık":42,"Danışman":26,"Telefon":18,"Fiyat":18,"Bölge":28,
+        "İl":16,"İlçe":18,"Mahalle":24,"Sokak/Cadde":28,"Site/Proje":26,"Açık Adres":46,
+        "Oda":12,"Satılık Kiralık":18,"Emlak Türü":20,"Brüt m²":14,"Net m²":14,
+        "İlan Tarihi":18,"İlan Açıklaması":60,"İlan Linki":48,"Kaynak":48,
+    }
+    for index,header in enumerate(headers,1):
+        ws.column_dimensions[get_column_letter(index)].width=widths.get(header,20)
+    ws.freeze_panes="A2"
+    ws.auto_filter.ref=ws.dimensions
+
 def write_list_file(path,items):
+    from openpyxl import Workbook
+
+    path=Path(path)
+    rows=list(items)
+    headers=_export_headers(rows)
+    if path.suffix.lower()==".csv":
+        path.parent.mkdir(parents=True,exist_ok=True)
+        with path.open("w",encoding="utf-8-sig",newline="") as stream:
+            writer=csv.writer(stream,delimiter=";")
+            writer.writerow(headers)
+            writer.writerows(_export_row(item,headers) for item in rows)
+        return path
+    if path.suffix.lower() != ".xlsx":
+        raise ValueError("Dışa aktarma dosyası .xlsx veya .csv uzantılı olmalıdır.")
+    wb=Workbook(); ws=wb.active; ws.title="İlan Listesi"
+    ws.append(headers)
+    link_column=headers.index("İlan Linki")+1
+    for item in rows:
+        ws.append(_export_row(item,headers))
+        if item.url:
+            cell=ws.cell(ws.max_row,link_column); cell.hyperlink=item.url; cell.style="Hyperlink"
+    _style_xlsx_headers(ws,headers)
+    path.parent.mkdir(parents=True,exist_ok=True)
+    wb.save(path)
+    return path
+
+def write_ai_template(path):
     from openpyxl import Workbook
     from openpyxl.styles import Alignment,Font,PatternFill
 
     path=Path(path)
-    if path.suffix.lower() != ".xlsx":
-        raise ValueError("Dışa aktarma dosyası .xlsx uzantılı olmalıdır.")
-    headers=[
-        "İlan No","Başlık","Danışman","Telefon","Fiyat","Bölge","Oda",
-        "Satılık Kiralık","Emlak Türü","m2","İlan Tarihi","İlan Linki","Kaynak",
-    ]
-    wb=Workbook(); ws=wb.active; ws.title="İlan Listesi"
+    if path.suffix.lower()!=".xlsx":
+        raise ValueError("Yapay zekâ şablonu .xlsx uzantılı olmalıdır.")
+    headers=[header for _field,header in FIXED_EXPORT_FIELDS]+COMMON_DETAIL_HEADERS
+    wb=Workbook(); ws=wb.active; ws.title="İlanlar"
     ws.append(headers)
-    for item in items:
-        ws.append([
-            item.listing_id,item.title,item.advisor,item.phone,item.price,item.location,
-            item.rooms,item.transaction_type,item.property_type,item.sqm,
-            item.listing_date,item.url,item.source_url,
-        ])
-        if item.url:
-            cell=ws.cell(ws.max_row,12); cell.hyperlink=item.url; cell.style="Hyperlink"
-    for cell in ws[1]:
+    _style_xlsx_headers(ws,headers)
+    notes=wb.create_sheet("Alan Açıklamaları")
+    notes.append(["Kural","Açıklama"])
+    notes.append(["Zorunlu alan","yalnızca İlan Linki zorunludur."])
+    notes.append(["Eksik bilgi","Kaynakta görünmeyen bilgileri tahmin etmeyin; boş bırakın."])
+    notes.append(["Ek alanlar","İlan sayfasındaki başka özellikleri yeni sütunlar olarak ekleyebilirsiniz."])
+    notes.append(["Bir satır bir ilan","Her ilanı ayrı satıra yazın ve başlıkları değiştirmeyin."])
+    for cell in notes[1]:
         cell.font=Font(color="FFFFFF",bold=True)
         cell.fill=PatternFill("solid",fgColor="0B4DB8")
         cell.alignment=Alignment(horizontal="center",vertical="center")
-    widths=[14,42,26,18,18,28,12,18,20,14,16,48,48]
-    for index,width in enumerate(widths,1):
-        ws.column_dimensions[chr(64+index)].width=width
-    ws.freeze_panes="A2"; ws.auto_filter.ref=ws.dimensions
+    notes.column_dimensions["A"].width=24
+    notes.column_dimensions["B"].width=90
+    notes.freeze_panes="A2"
+    notes.sheet_view.showGridLines=False
+    ws.sheet_view.showGridLines=False
     path.parent.mkdir(parents=True,exist_ok=True)
     wb.save(path)
     return path

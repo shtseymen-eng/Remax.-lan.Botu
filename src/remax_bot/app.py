@@ -9,8 +9,11 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEngineProfile,QWebEnginePage
 
 from .core import DB,Listing,norm,source_key,source_label,split_listings_by_site,update_listing_fields
+from .listing_details import display_address
 from .playwright_scanner import PlaywrightScanner
-from .importer import LINK_SOURCES,read_list_file,write_list_file,command_response,command_help,advisor_names,advisor_display_name,is_valid_advisor,filter_listings,price_number
+from .importer import LINK_SOURCES,read_list_file,write_list_file,write_ai_template,command_response,command_help,advisor_names,advisor_display_name,is_valid_advisor,filter_listings,price_number
+from .scan_queue import AUTO_SCAN_SOURCE_LABELS,AutoScanQueue
+from .settings_schema import DEFAULT_SEARCH_FIELDS,DEFAULT_SEARCH_SOURCES,SEARCH_FIELD_LABELS,normalize_command_prefix,normalize_search_fields,normalize_search_sources
 from .whatsapp_playwright import ExternalWhatsAppBot
 from . import __version__
 
@@ -60,7 +63,11 @@ class ListingEditDialog(QDialog):
         ('listing_id','İlan No'),('title','Başlık'),('advisor','Danışman'),
         ('phone','Telefon'),('price','Fiyat'),('location','Bölge'),('rooms','Oda'),
         ('transaction_type','Satılık / Kiralık'),('property_type','Emlak Türü'),
-        ('sqm','m²'),('listing_date','İlan Tarihi'),('url','İlan Linki'),
+        ('sqm','Brüt m²'),('net_sqm','Net m²'),('listing_date','İlan Tarihi'),
+        ('province','İl'),('district','İlçe'),('neighborhood','Mahalle'),
+        ('street','Sokak / Cadde'),('complex_name','Site / Proje'),
+        ('full_address','Açık Adres'),('description','İlan Açıklaması'),
+        ('details','Ek Özellikler (JSON)'),('url','İlan Linki'),
         ('source_url','Kaynak Linki'),
     ]
 
@@ -74,7 +81,9 @@ class ListingEditDialog(QDialog):
         form=QFormLayout()
         self.inputs={}
         for field,label in self.FIELDS:
-            edit=QLineEdit(str(getattr(item,field) or ''))
+            value=getattr(item,field)
+            if field=='details':value=json.dumps(value or {},ensure_ascii=False,sort_keys=True)
+            edit=QLineEdit(str(value or ''))
             edit.setObjectName(f'listing_{field}')
             self.inputs[field]=edit
             form.addRow(label+':',edit)
@@ -116,12 +125,27 @@ class Main(QMainWindow):
         self.refresh()
 
     def _load_settings(self):
-        base={'group':'','sound':True,'bot':False,'days':7,'link_source':'MyRE/MAX'}
+        base={
+            'group':'','sound':True,'bot':False,'days':7,'link_source':'MyRE/MAX',
+            'command_prefix':'#','search_sources':list(DEFAULT_SEARCH_SOURCES),
+            'search_fields':list(DEFAULT_SEARCH_FIELDS),'auto_scan_after_import':True,
+            'auto_scan_sources':list(AUTO_SCAN_SOURCE_LABELS),
+        }
         try:
             if self.cfg.exists():
                 base.update(json.loads(self.cfg.read_text(encoding='utf-8')))
         except Exception:
             pass
+        base['command_prefix']=normalize_command_prefix(base.get('command_prefix'))
+        base['search_sources']=normalize_search_sources(base.get('search_sources'))
+        base['search_fields']=normalize_search_fields(base.get('search_fields'))
+        selected_auto=base.get('auto_scan_sources')
+        if not isinstance(selected_auto,(list,tuple,set)):
+            selected_auto=AUTO_SCAN_SOURCE_LABELS
+        base['auto_scan_sources']=[
+            label for label in AUTO_SCAN_SOURCE_LABELS if label in selected_auto
+        ]
+        base['auto_scan_after_import']=bool(base.get('auto_scan_after_import',True))
         return base
 
     def _save_settings(self):
@@ -277,26 +301,30 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
 
         self.wabot=ExternalWhatsAppBot(
             lambda text:command_response(
-                self.db.all(),text,link_source=self.settings.get('link_source','MyRE/MAX')
+                self.db.all(),text,
+                prefix=self.settings.get('command_prefix','#'),
+                search_sources=self.settings.get('search_sources'),
+                search_fields=self.settings.get('search_fields'),
             ),
             profile_dir=app_data()/'whatsapp-chrome-profile',
             initial_group=self.settings.get('group',''),
             start_active=bool(self.settings.get('bot')),
+            command_prefix=self.settings.get('command_prefix','#'),
         )
         self.wabot.status.connect(self._wa_status)
         show_chrome.clicked.connect(self.wabot.show_browser)
         QApplication.instance().aboutToQuit.connect(self.wabot.shutdown)
 
     def _new_listing_table(self):
-        table=QTableWidget(0,11)
+        table=QTableWidget(0,12)
         table.setHorizontalHeaderLabels([
             'Kaynak','Danışman / İlan Sahibi','Telefon','Başlık','Fiyat',
-            'Bölge','Oda','m²','Tür','İlan Tarihi','İlan Linki'
+            'Bölge','Adres','Oda','m²','Tür','İlan Tarihi','İlan Linki'
         ])
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         table.setSelectionBehavior(QAbstractItemView.SelectRows)
         table.itemSelectionChanged.connect(lambda t=table:self._remember_listing_table(t))
-        [table.horizontalHeader().setSectionResizeMode(c,QHeaderView.Stretch) for c in [1,3,5,10]]
+        [table.horizontalHeader().setSectionResizeMode(c,QHeaderView.Stretch) for c in [1,3,5,6,11]]
         table.cellDoubleClicked.connect(lambda row,_col,t=table:self.open_link(t,row))
         return table
 
@@ -410,7 +438,10 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.sc.status.connect(self.scanstatus.setText)
         self.sc.failed.connect(self.scan_failed)
         self.sc.done.connect(self.scan_done)
+        self.sc.busy_changed.connect(self._scanner_busy_changed)
         self.sc.verification_needed.connect(self.scan_verification)
+        self.auto_scan_queue=AutoScanQueue(SOURCES)
+        self._auto_advance_pending=False
 
     def _data(self):
         p,l=self._page()
@@ -433,13 +464,20 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         imp.setObjectName('blue')
         imp.clicked.connect(self.import_file)
         import_layout.addWidget(imp)
+        template_button=QPushButton('YAPAY ZEKÂ EXCEL ŞABLONU')
+        template_button.setObjectName('ghost')
+        template_button.clicked.connect(self.save_ai_template)
+        import_layout.addWidget(template_button)
         movement.addWidget(import_box,1)
 
         export_box=QGroupBox('Verileri Dışarı Aktar')
         export_layout=QVBoxLayout(export_box)
-        export_note=QLabel('Seçilen sitenin bütün ilanlarını Excel dosyası olarak kaydeder.')
+        export_note=QLabel('Seçilen sitenin bütün ilanlarını Excel veya CSV dosyası olarak kaydeder.')
         export_note.setWordWrap(True)
         export_layout.addWidget(export_note)
+        export_formats=QLabel('Desteklenen biçimler: Excel (*.xlsx);;CSV (*.csv)')
+        export_formats.setStyleSheet(f'color:{MUTED};font-size:11px')
+        export_layout.addWidget(export_formats)
         export_row=QHBoxLayout()
         self.export_source=QComboBox()
         self.export_source.addItems(list(LINK_SOURCES))
@@ -508,7 +546,8 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         test=QGroupBox('Bot Komut Testi')
         tf=QVBoxLayout(test)
         self.quick_cmd=QLineEdit()
-        self.quick_cmd.setPlaceholderText('#Max başla / #Max başlat / #? / #danışmanlar / #izmit kiralık 55 bin')
+        prefix=self.settings.get('command_prefix','#')
+        self.quick_cmd.setPlaceholderText(f'{prefix}Max başla / {prefix}? / {prefix}danışmanlar / {prefix}izmit kiralık 55 bin')
         cb=QPushButton('KOMUTU TEST ET')
         cb.setObjectName('blue')
         cb.clicked.connect(self.quick_test)
@@ -529,7 +568,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.quick_result=QPlainTextEdit()
         self.quick_result.setReadOnly(True)
         self.quick_result.setMaximumHeight(220)
-        self.quick_result.setPlainText('Komutun yalnızca başında # olması yeterlidir.')
+        self.quick_result.setPlainText(f'Komutun yalnızca başında {prefix} olması yeterlidir.')
         tf.addWidget(self.quick_result)
         l.addWidget(test)
 
@@ -538,6 +577,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.commandlist=QPlainTextEdit()
         self.commandlist.setReadOnly(True)
         self.commandlist.setPlainText(command_help())
+        if prefix!='#':self.commandlist.setPlainText(command_help(prefix=prefix))
         self.commandlist.setMinimumHeight(280)
         cf.addWidget(self.commandlist)
         l.addWidget(commands,1)
@@ -567,15 +607,65 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.days.setRange(1,60)
         self.days.setValue(self.settings.get('days',7))
         self.days.setSuffix(' gün')
-        self.link_source=QComboBox()
-        self.link_source.addItems(list(LINK_SOURCES))
-        selected_source=self.settings.get('link_source','MyRE/MAX')
-        self.link_source.setCurrentText(selected_source if selected_source in LINK_SOURCES else 'MyRE/MAX')
         f.addRow('WhatsApp grup/sohbet adı:',self.group)
-        f.addRow('İlan linki kaynağı:',self.link_source)
         f.addRow('Bildirim:',self.sound)
         f.addRow('Güncelleme hatırlatması:',self.days)
         l.addLayout(f)
+
+        max_box=QGroupBox('Max Arama Ayarları')
+        max_layout=QVBoxLayout(max_box)
+        prefix_form=QFormLayout()
+        self.command_prefix=QLineEdit(self.settings.get('command_prefix','#'))
+        self.command_prefix.setMaxLength(1)
+        self.command_prefix.setFixedWidth(80)
+        prefix_form.addRow('Komut işareti:',self.command_prefix)
+        max_layout.addLayout(prefix_form)
+
+        search_columns=QHBoxLayout()
+        source_column=QVBoxLayout()
+        source_column.addWidget(QLabel('Aranacak kaynaklar'))
+        self.search_source_checks={}
+        selected_sources=set(self.settings.get('search_sources',DEFAULT_SEARCH_SOURCES))
+        for source in DEFAULT_SEARCH_SOURCES:
+            check=QCheckBox(source)
+            check.setChecked(source in selected_sources)
+            self.search_source_checks[source]=check
+            source_column.addWidget(check)
+        source_column.addStretch()
+        search_columns.addLayout(source_column,1)
+
+        field_column=QVBoxLayout()
+        field_column.addWidget(QLabel('Aranacak veri alanları'))
+        field_grid=QGridLayout()
+        self.search_field_checks={}
+        selected_fields=set(self.settings.get('search_fields',DEFAULT_SEARCH_FIELDS))
+        for index,field in enumerate(DEFAULT_SEARCH_FIELDS):
+            check=QCheckBox(SEARCH_FIELD_LABELS[field])
+            check.setChecked(field in selected_fields)
+            self.search_field_checks[field]=check
+            field_grid.addWidget(check,index//2,index%2)
+        field_column.addLayout(field_grid)
+        search_columns.addLayout(field_column,2)
+        max_layout.addLayout(search_columns)
+
+        auto_note=QLabel('Sahibinden Excel/CSV yüklendikten sonra seçilen kaynaklar sırayla taranır.')
+        auto_note.setWordWrap(True)
+        auto_note.setStyleSheet(f'color:{MUTED};font-size:11px')
+        max_layout.addWidget(auto_note)
+        self.auto_scan_after_import=QCheckBox('Yükleme sonrası otomatik tarama')
+        self.auto_scan_after_import.setChecked(self.settings.get('auto_scan_after_import',True))
+        max_layout.addWidget(self.auto_scan_after_import)
+        self.auto_scan_source_checks={}
+        selected_auto=set(self.settings.get('auto_scan_sources',AUTO_SCAN_SOURCE_LABELS))
+        auto_row=QHBoxLayout()
+        for source in AUTO_SCAN_SOURCE_LABELS:
+            check=QCheckBox(source)
+            check.setChecked(source in selected_auto)
+            self.auto_scan_source_checks[source]=check
+            auto_row.addWidget(check)
+        auto_row.addStretch()
+        max_layout.addLayout(auto_row)
+        l.addWidget(max_box)
 
         save=QPushButton('AYARLARI KAYDET')
         save.setObjectName('blue')
@@ -673,7 +763,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         table.setRowCount(len(rows))
         for r,x in enumerate(rows):
             vals=[
-                source_label(x.source_url),advisor_display_name(x.advisor),x.phone,x.title,x.price,x.location,x.rooms,x.sqm,
+                source_label(x.source_url),advisor_display_name(x.advisor),x.phone,x.title,x.price,x.location,display_address(x),x.rooms,x.sqm,
                 ' / '.join(v for v in [x.transaction_type,x.property_type] if v),x.listing_date,x.url
             ]
             for c,v in enumerate(vals):
@@ -706,8 +796,36 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.refresh()
 
     def scan_selected(self):
+        self.auto_scan_queue.start([])
+        self._auto_advance_pending=False
         self.scanstatus.setText('Tarama başlatılıyor...')
         self.sc.start(SOURCES[self.source_combo.currentText()])
+
+    def _start_auto_scan_queue(self):
+        if not self.settings.get('auto_scan_after_import',True):return
+        self.auto_scan_queue.start(self.settings.get('auto_scan_sources',AUTO_SCAN_SOURCE_LABELS))
+        self._auto_advance_pending=self.sc.phase=='busy'
+        if not self._auto_advance_pending:self._scan_next_queued_source()
+
+    def _scan_next_queued_source(self):
+        item=self.auto_scan_queue.next_item()
+        if item is None:
+            if self.auto_scan_queue.finished:
+                self.scanstatus.setText('Yükleme sonrası otomatik taramalar tamamlandı.')
+            return
+        label,url=item
+        self.scanstatus.setText(f'Otomatik tarama başlatılıyor: {label}')
+        self.sc.start(url)
+
+    def _complete_current_scan(self,success):
+        if self.auto_scan_queue.current is None:return
+        self.auto_scan_queue.complete(success)
+        self._auto_advance_pending=True
+
+    def _scanner_busy_changed(self,busy):
+        if not busy and self._auto_advance_pending:
+            self._auto_advance_pending=False
+            self._scan_next_queued_source()
 
     def import_file(self):
         path,_=QFileDialog.getOpenFileName(self,'İlan Listesi Seç','','Excel (*.xlsx);;CSV (*.csv)')
@@ -718,8 +836,20 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
             self.db.setmeta('last_update',datetime.now().strftime('%d.%m.%Y %H:%M'))
             self.refresh()
             QMessageBox.information(self,'İçe Aktarma',f'{len(items)} ilan eklendi/güncellendi.')
+            self._start_auto_scan_queue()
         except Exception as e:
             QMessageBox.warning(self,'İçe Aktarma',str(e))
+
+    def save_ai_template(self):
+        suggested='REMAX İlan Bot Şablon.xlsx'
+        path,_=QFileDialog.getSaveFileName(self,'Yapay Zekâ Excel Şablonunu Kaydet',suggested,'Excel (*.xlsx)')
+        if not path:return
+        if not path.lower().endswith('.xlsx'):path+='.xlsx'
+        try:
+            write_ai_template(path)
+            QMessageBox.information(self,'Excel Şablonu',f'Şablon kaydedildi.\n{path}')
+        except Exception as error:
+            QMessageBox.warning(self,'Excel Şablonu',str(error))
 
     def export_selected_site(self):
         site=self.export_source.currentText()
@@ -729,14 +859,17 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
             return
         stamp=datetime.now().strftime('%Y%m%d')
         suggested=f"REMAX_{site.replace('/','-')}_{stamp}.xlsx"
-        path,_=QFileDialog.getSaveFileName(self,'İlanları Excel’e Aktar',suggested,'Excel (*.xlsx)')
+        path,selected_filter=QFileDialog.getSaveFileName(
+            self,'İlanları Dışa Aktar',suggested,'Excel (*.xlsx);;CSV (*.csv)'
+        )
         if not path:return
-        if not path.lower().endswith('.xlsx'):path+='.xlsx'
+        if not path.lower().endswith(('.xlsx','.csv')):
+            path+='.csv' if selected_filter.startswith('CSV') else '.xlsx'
         try:
             write_list_file(path,rows)
-            QMessageBox.information(self,'Excel Dışa Aktarma',f'{site}: {len(rows)} ilan kaydedildi.\n{path}')
+            QMessageBox.information(self,'Dışa Aktarma',f'{site}: {len(rows)} ilan kaydedildi.\n{path}')
         except Exception as error:
-            QMessageBox.warning(self,'Excel Dışa Aktarma',str(error))
+            QMessageBox.warning(self,'Dışa Aktarma',str(error))
 
     def edit_selected_listing(self):
         current_table=self.listing_tabs.currentWidget()
@@ -811,7 +944,9 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
     def quick_test(self):
         out=command_response(
             self.db.all(),self.quick_cmd.text().strip(),
-            link_source=self.settings.get('link_source','MyRE/MAX')
+            prefix=self.settings.get('command_prefix','#'),
+            search_sources=self.settings.get('search_sources'),
+            search_fields=self.settings.get('search_fields'),
         )
         self.quick_result.setPlainText(out or 'Bot bu mesajı görmezden gelir.')
         self.quick_result.setVisible(True)
@@ -823,14 +958,27 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.quick_toggle.setText('▼ SONUCU GÖSTER' if visible else '▲ SONUCU GİZLE')
 
     def save_settings(self):
+        prefix=normalize_command_prefix(self.command_prefix.text())
+        sources=[name for name,check in self.search_source_checks.items() if check.isChecked()]
+        fields=[name for name,check in self.search_field_checks.items() if check.isChecked()]
+        auto_sources=[name for name,check in self.auto_scan_source_checks.items() if check.isChecked()]
         self.settings.update(
             group=self.group.text().strip(),
-            link_source=self.link_source.currentText(),
             sound=self.sound.isChecked(),
-            days=self.days.value()
+            days=self.days.value(),
+            command_prefix=prefix,
+            search_sources=sources,
+            search_fields=fields,
+            auto_scan_after_import=self.auto_scan_after_import.isChecked(),
+            auto_scan_sources=auto_sources,
         )
         self._save_settings()
+        self.command_prefix.setText(prefix)
         self.wabot.set_group(self.settings.get('group',''))
+        self.wabot.set_command_prefix(prefix)
+        self.commandlist.setPlainText(command_help(prefix=prefix))
+        self.quick_cmd.setPlaceholderText(f'{prefix}Max başla / {prefix}? / {prefix}danışmanlar / {prefix}izmit kiralık 55 bin')
+        self.quick_result.setPlainText(f'Komutun yalnızca başında {prefix} olması yeterlidir.')
         self.refresh()
 
     def refresh_advisor_merge_list(self,*_args):
@@ -902,7 +1050,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         QMessageBox.information(self,'Danışman Birleştirme',f'“{canonical}” birleştirmesi kaldırıldı.')
 
     def open_link(self,table,row):
-        x=table.item(row,10)
+        x=table.item(row,11)
         if x and x.text():
             self._go(3)
             self.nav_buttons[3].setChecked(True)
@@ -914,18 +1062,24 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
 
     def scan_failed(self,msg):
         self.scanstatus.setText(msg)
-        QMessageBox.warning(self,'Tarama',msg)
+        automatic=self.auto_scan_queue.current is not None
+        self._complete_current_scan(False)
+        if not automatic:QMessageBox.warning(self,'Tarama',msg)
 
     def scan_done(self,source,rows):
-        if not rows:return
-        self.db.replace_source(source,rows)
-        stamp=datetime.now().strftime('%d.%m.%Y %H:%M')
-        self.db.setmeta('last_update',stamp)
-        self.db.setmeta('last_source',source)
-        self.refresh()
-        self.scanstatus.setText(f'{source_label(source)} güncellendi: {len(rows)} ilan.')
-        if self.settings.get('sound'):
-            QApplication.beep()
+        try:
+            if rows:
+                self.db.replace_source(source,rows)
+                stamp=datetime.now().strftime('%d.%m.%Y %H:%M')
+                self.db.setmeta('last_update',stamp)
+                self.db.setmeta('last_source',source)
+                self.refresh()
+                self.scanstatus.setText(f'{source_label(source)} güncellendi: {len(rows)} ilan.')
+                if self.settings.get('sound'):QApplication.beep()
+            else:
+                self.scanstatus.setText(f'{source_label(source)} için ilan bulunamadı; eski veriler korundu.')
+        finally:
+            self._complete_current_scan(bool(rows))
 
 def main():
     app=QApplication(sys.argv)

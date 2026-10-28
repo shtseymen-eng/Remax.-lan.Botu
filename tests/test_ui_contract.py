@@ -45,6 +45,8 @@ def test_data_movement_controls_are_collected_on_the_data_page():
     assert "EXCEL'E AKTAR" not in listings
     assert "EXCEL / CSV YÜKLE" in data
     assert "VERİLERİ EXCEL'E AKTAR" in data
+    assert "YAPAY ZEKÂ EXCEL ŞABLONU" in data
+    assert "Excel (*.xlsx);;CSV (*.csv)" in data
     assert "self.export_source.addItems(list(LINK_SOURCES))" in data
     assert "exportb.clicked.connect(self.export_selected_site)" in data
 
@@ -73,15 +75,40 @@ def test_settings_show_group_but_bot_test_has_its_own_page():
     assert "Bot Komut Testi" not in settings
 
 
-def test_saved_link_source_is_used_by_whatsapp_and_bot_test():
+def test_saved_max_search_settings_are_used_by_whatsapp_and_bot_test():
     home = APP[APP.index("    def _home(self):"):APP.index("    def _new_listing_table(self):")]
     bot_test = APP[APP.index("    def quick_test(self):"):APP.index("    def toggle_quick_result(self):")]
     settings = APP[APP.index("    def _settings(self):"):APP.index("    def refresh(self")]
     save = APP[APP.index("    def save_settings(self):"):APP.index("    def open_link(self,table,row):")]
 
-    assert "'link_source':'MyRE/MAX'" in APP
-    assert "İlan linki kaynağı:" in settings
-    assert "self.link_source.addItems(list(LINK_SOURCES))" in settings
-    assert "link_source=self.settings.get('link_source','MyRE/MAX')" in home
-    assert "link_source=self.settings.get('link_source','MyRE/MAX')" in bot_test
-    assert "link_source=self.link_source.currentText()" in save
+    assert "Max Arama Ayarları" in settings
+    assert "Komut işareti:" in settings
+    assert "Aranacak kaynaklar" in settings
+    assert "Aranacak veri alanları" in settings
+    assert "Yükleme sonrası otomatik tarama" in settings
+    assert "search_sources=self.settings.get('search_sources')" in home
+    assert "search_fields=self.settings.get('search_fields')" in home
+    assert "prefix=self.settings.get('command_prefix','#')" in home
+    assert "search_sources=self.settings.get('search_sources')" in bot_test
+    assert "self.wabot.set_command_prefix" in save
+
+
+def test_listing_table_adds_one_address_column_and_keeps_link_navigation():
+    table = APP[APP.index("    def _new_listing_table(self):"):APP.index("    def _listings(self):")]
+    fill = APP[APP.index("    def _fill_listing_table(self,table,rows):"):APP.index("    def apply_filters(self):")]
+    open_link = APP[APP.index("    def open_link(self,table,row):"):APP.index("    def scan_verification(self,msg):")]
+
+    assert "QTableWidget(0,12)" in table
+    assert "'Bölge','Adres','Oda'" in table
+    assert "display_address(x)" in fill
+    assert "table.item(row,11)" in open_link
+
+
+def test_import_success_can_start_the_selected_automatic_scan_queue():
+    import_logic = APP[APP.index("    def import_file(self):"):APP.index("    def export_selected_site(self):")]
+    scan_logic = APP[APP.index("    def _start_auto_scan_queue(self):"):APP.index("    def import_file(self):")]
+
+    assert "self._start_auto_scan_queue()" in import_logic
+    assert "def _scan_next_queued_source(self):" in scan_logic
+    assert "def _complete_current_scan(self,success):" in scan_logic
+    assert "self.sc.start(url)" in scan_logic

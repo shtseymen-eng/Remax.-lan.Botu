@@ -6,13 +6,17 @@ Windows ve macOS üzerinde çalışan ilan yönetimi ve WhatsApp yanıt uygulama
 
 - İki MyRE/MAX ofisini, Emlakjet ÇARŞI ofisini ve iki Sahibinden mağazasını ayrı kaynaklar olarak tarar.
 - İlanlar sayfasını Sahibinden, Emlakjet ve MyRE/MAX sekmelerinde ayrı listeler.
-- Veri Ekle sayfasında seçilen sitenin tüm ilanlarını Excel'e aktarır; MyRE/MAX ve Sahibinden seçimleri kendi iki ofis/mağaza kaynaklarını birlikte içerir.
+- Veri Ekle sayfasında seçilen sitenin tüm ilanlarını Excel veya CSV'ye aktarır; MyRE/MAX ve Sahibinden seçimleri kendi iki ofis/mağaza kaynaklarını birlikte içerir.
+- İlan detay sayfalarından kaynakta bulunan il, ilçe, mahalle, sokak/cadde, site/proje, açık adres, açıklama, brüt/net m² ve diğer özellikleri toplar; eksik bilgiyi tahmin etmez.
+- Sahibinden ilanlarını başka bir yapay zekâ ile hazırlamak için uygulama içinden boş **REMAX İlan Bot Şablon.xlsx** dosyası üretir.
 - Tabloda seçilen bir ilanın hatalı alanlarını uygulama içinde düzenleyip günceller.
 - `#danışmanlar` komutunda her danışmanın üç sitedeki ilan adetlerini ayrı ayrı gösterir.
 - Excel/CSV dosyalarından veya manuel girişten ilan ekler.
 - İlanları danışman, konum, tür ve fiyata göre filtreler.
 - `dükkan-ofis` ve `ev-daire` gibi birleşik sorgularda türlerden herhangi biriyle eşleşir.
 - İlan arama komutlarında ayrıca `link` yazılmasa da sonuçları doğrudan ilan linkleriyle gönderir.
+- Max'in komut işareti, arayacağı kaynaklar ve arayacağı ilan alanları Ayarlar bölümünden seçilebilir.
+- Sahibinden dosyası yüklendikten sonra seçilen iki MyRE/MAX ofisini ve Emlakjet ofisini sırayla otomatik günceller.
 - Danışman isimlerinin farklı yazımlarını Ayarlar bölümünde seçerek kalıcı biçimde tek isim altında birleştirir; gerektiğinde birleştirmeyi kaldırır.
 - Kalıcı oturum profiliyle ayrı bir Google Chrome penceresindeki WhatsApp Web mesajlarını okur ve yanıtlar.
 - Ayarlardaki grup/sohbet adını otomatik bulup açar.
@@ -50,13 +54,13 @@ python -m remax_bot.app
 1. Sabit bir grup isterseniz **Ayarlar** bölümüne WhatsApp grup/sohbet adını eksiksiz yazıp kaydedin; Chrome otomatik olarak bu gruba geçer.
 2. **BOTU BAŞLAT** düğmesine basın.
 3. Max, ayrı Google Chrome penceresindeki WhatsApp Web'de belirtilen sohbeti bulur.
-4. Durum satırında grubun açıldığı görüldükten sonra sohbete `#Max başla` veya `#Max başlat` yazın.
-5. `#?` ile komut yardımını veya örneğin `#izmit kiralık 3+1#` sorgusunu gönderin.
-6. `#Max durdur` ile cevap modunu kapatın.
+4. Ayarlar'daki varsayılan `#` komut işaretiyle sohbete `#Max başla` veya `#Max başlat` yazın.
+5. `#?` ile komut yardımını veya örneğin `#izmit kiralık 3+1` sorgusunu gönderin.
+6. `#Max durdur` ile cevap modunu kapatın. Komut işaretini örneğin `!` yaparsanız aynı komutlar `!Max başla`, `!?` ve `!izmit kiralık` biçiminde kullanılır.
 
 Komutları WhatsApp'a göndermeden denemek için soldaki **Bot Testi** sayfasını kullanabilirsiniz. Ana Sayfa WhatsApp bağlantı durumunu ve Chrome penceresini öne getiren düğmeyi gösterir.
 
-Normal ilan sorguları, Ayarlar bölümünde seçili sitedeki sonuçları linkleriyle döndürür. Komutun başına `#emlakjet`, `#sahibinden` veya `#myremax` yazarak o sorgu için site seçimini geçersiz kılabilirsiniz. Örnek: `#emlakjet izmit kiralık dükkan-ofis`.
+Normal ilan sorguları, Ayarlar bölümünde işaretli kaynaklardaki ve işaretli veri alanlarındaki sonuçları linkleriyle döndürür. Komutun başına `#emlakjet`, `#sahibinden` veya `#myremax` yazarak o sorguyu tek bir kaynakla sınırlayabilirsiniz. Örnek: `#emlakjet izmit kiralık dükkan-ofis`. `#danışmanlar` komutu bu seçimlerden bağımsız olarak üç platformdaki ilanları karşılaştırır.
 
 ## İlan kaynaklarını güncelleme
 
@@ -65,7 +69,9 @@ Normal ilan sorguları, Ayarlar bölümünde seçili sitedeki sonuçları linkle
 3. Site güvenlik doğrulaması isterse açılan tarama penceresinde doğrulamayı tamamlayın.
 4. Tarama eksik kalırsa o kaynağın önceki ilanları korunur; başarılı olursa yalnızca seçilen kaynak yenilenir.
 
-Dosya yükleme ve dışa aktarma işlemleri **Veri Ekle** sayfasında birlikte bulunur. Sahibinden, Emlakjet veya MyRE/MAX kaynağını seçip **VERİLERİ EXCEL'E AKTAR** düğmesini kullanın. Bir satırı düzeltmek için İlanlar sayfasında satırı seçip **SEÇİLİ İLANI DÜZENLE** düğmesine basın. Kaynak sütunu dışa aktarılan dosyada korunduğu için dosya yeniden yüklendiğinde ilanlar doğru site sekmesine döner.
+Dosya yükleme ve dışa aktarma işlemleri **Veri Ekle** sayfasında birlikte bulunur. Sahibinden ilan linklerini başka bir yapay zekâya verdiğinizde önce **YAPAY ZEKÂ EXCEL ŞABLONU** düğmesiyle üretilen dosyayı kullandırın. Yapay zekâ her ilanı ayrı satıra yazmalı, kaynaktaki bütün görünen alanları doldurmalı, bulunmayan bilgileri boş bırakmalı ve yeni ayrıntıları ek sütunlar olarak korumalıdır. Bu Excel/CSV dosyasını **EXCEL / CSV YÜKLE** ile içeri alın. Ayarlar'daki otomatik tarama açıksa seçilen MyRE/MAX ve Emlakjet kaynakları bundan sonra tek tek güncellenir; bir kaynak başarısız olsa bile sıradaki kaynak denenir ve eski kayıtlar korunur.
+
+Sahibinden, Emlakjet veya MyRE/MAX kaynağını seçip **VERİLERİ EXCEL'E AKTAR** düğmesiyle `.xlsx` veya `.csv` kaydedebilirsiniz. Bir satırı düzeltmek için İlanlar sayfasında satırı seçip **SEÇİLİ İLANI DÜZENLE** düğmesine basın. Kaynak ve ayrıntı sütunları dışa aktarılan dosyada korunduğu için dosya yeniden yüklendiğinde ilanlar doğru site sekmesine ve alanlara döner.
 
 Danışman yazım farklılıklarını düzeltmek için **Ayarlar > Danışman İsimlerini Birleştir** alanında isimleri işaretleyin, kullanılacak ana ismi seçin veya yazın ve **BİRLEŞTİR VE GÜNCELLE** düğmesine basın. Sadece işaretlenen isimler birleşir; kural sonraki tarama ve yüklemelere de uygulanır. Aynı alandan birleştirmeyi kaldırabilirsiniz.
 
@@ -79,4 +85,4 @@ python -m pytest -q
 
 ## Hazır paketler
 
-`.github/workflows/main.yml` her ana dal güncellemesinde testleri çalıştırır. Testler başarılı olursa Windows EXE ve macOS APP paketleri GitHub Actions çıktısı olarak hazırlanır.
+`.github/workflows/main.yml` her ana dal güncellemesinde testleri ayrı Windows ve macOS işlerinde çalıştırır. Testler başarılı olursa GitHub Actions çalışmasının **Artifacts** bölümünde `REMAX-Ilan-Botu-Windows` (EXE paketi) ve `REMAX-Ilan-Botu-macOS` (APP ZIP paketi) hazırlanır.

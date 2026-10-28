@@ -55,7 +55,7 @@ EXTERNAL_SNAPSHOT_JS = r"""
       'span[class*="selectable-text"],[data-lexical-text="true"],[data-pre-plain-text]'
     );
     const text=clean(textNode?.innerText || meta?.innerText || row.innerText);
-    if(!text.startsWith('#')) continue;
+    if(!text) continue;
     const dataId=idNode?.getAttribute('data-id') || '';
     const pre=meta?.getAttribute('data-pre-plain-text') || '';
     if(!chatToken && dataId){

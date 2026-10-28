@@ -31,6 +31,82 @@ def run_snapshot(setup: str):
     return run_script(setup, EmbeddedWhatsAppBot.SNAPSHOT_JS)
 
 
+def test_snapshot_layers_forward_custom_prefix_messages_to_the_router():
+    embedded_setup = r'''
+const commandText = {
+  parentElement: null,
+  innerText: '!Max başla', textContent: '!Max başla',
+  matches(selector){ return selector.includes('[data-lexical-text="true"]'); },
+  closest(selector){ return selector.includes('[data-id]') ? messageRow : null; },
+  getRootNode(){ return document; },
+  getAttribute(){ return ''; },
+};
+const messageRow = {
+  parentElement: null,
+  innerText: '!Max başla', textContent: '!Max başla',
+  matches(selector){ return selector.includes('[data-id]'); },
+  closest(){ return this; },
+  querySelector(selector){ return selector.includes('[data-lexical-text="true"]') ? commandText : null; },
+  querySelectorAll(){ return []; },
+  getRootNode(){ return document; },
+  getAttribute(name){ return name === 'data-id' ? 'false_custom_EMBEDDED' : ''; },
+};
+commandText.parentElement = messageRow;
+const composer = {
+  parentElement: null, offsetParent: {}, isContentEditable: true, tagName: 'DIV',
+  innerText: '', textContent: '',
+  matches(selector){ return selector.includes('[contenteditable="true"]'); },
+  closest(){ return null; },
+  getRootNode(){ return document; },
+  getClientRects(){ return [1]; },
+  getAttribute(name){ return name === 'role' ? 'textbox' : ''; },
+};
+global.document = {
+  querySelector(){ return null; },
+  querySelectorAll(selector){
+    if(selector.includes('[contenteditable="true"]')) return [composer];
+    if(selector.includes('[data-lexical-text="true"]')) return [commandText];
+    if(selector.includes('[data-id]')) return [messageRow];
+    if(selector === '*') return [composer,messageRow,commandText];
+    return [];
+  },
+};
+'''
+    external_setup = r'''
+const textNode = {innerText: '!Max başla', textContent: '!Max başla'};
+const row = {
+  innerText: '!Max başla',
+  matches(selector){ return selector.includes('msg-container') || selector.includes('[data-id]'); },
+  closest(selector){ return selector.includes('#side') ? null : this; },
+  querySelector(selector){ return selector.includes('msg-text') ? textNode : null; },
+  getAttribute(name){ return name === 'data-id' ? 'false_custom_EXTERNAL' : ''; },
+};
+const main = {
+  querySelector(){ return null; },
+  querySelectorAll(){ return [row]; },
+};
+const composer = {
+  offsetParent: {},
+  getClientRects(){ return [1]; },
+  closest(){ return null; },
+};
+global.document = {
+  querySelector(selector){ return selector === '#main' ? main : null; },
+  querySelectorAll(selector){ return selector.includes('[contenteditable="true"]') ? [composer] : []; },
+};
+'''
+
+    embedded = run_snapshot(embedded_setup)
+    external = run_script(external_setup, EXTERNAL_SNAPSHOT_JS)
+
+    assert embedded["messages"] == [
+        {"id": "false_custom_EMBEDDED", "text": "!Max başla"}
+    ]
+    assert external["messages"] == [
+        {"id": "false_custom_EXTERNAL", "text": "!Max başla", "outgoing": False}
+    ]
+
+
 def test_reader_detects_current_dom_without_footer_or_legacy_testids():
     setup = r'''
 const commandText = {
@@ -353,11 +429,11 @@ def test_saved_group_is_opened_in_embedded_whatsapp():
 
 
 def test_application_and_package_versions_match():
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    package = (ROOT / "src/remax_bot/__init__.py").read_text(encoding="utf-8")
+    from remax_bot import __version__
 
-    assert project["project"]["version"] == "0.41.1"
-    assert '__version__="0.41.1"' in package
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert project["project"]["version"] == __version__ == "0.42.0"
 
 
 def test_all_embedded_browser_scripts_are_valid_javascript():

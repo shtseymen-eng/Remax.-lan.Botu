@@ -408,7 +408,7 @@ class EmbeddedWhatsAppBot(QObject):
           if(match) chatToken=match[1];
         }
 
-        if(!text || !text.startsWith('#')) continue;
+        if(!text) continue;
 
         const id=dataId || `${pre}::${text}`;
         if(!id) continue;

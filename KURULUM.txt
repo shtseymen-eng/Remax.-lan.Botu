@@ -1,13 +1,15 @@
-RE/MAX İlan Botu V0.41.1 - Harici Google Chrome WhatsApp Okuyucusu
+RE/MAX İlan Botu V0.42.0 - Ayrıntılı İlan Havuzu ve Ayarlanabilir Max
 
 ÇALIŞMA ŞEKLİ
 1. Uygulamanın otomatik açtığı ayrı Google Chrome penceresinde WhatsApp Web oturumu açın. İlk kullanımda QR kodunu okutun.
-2. Ayarlarda grup adı boşsa istediğiniz sohbeti açıp #Max başla yazın.
+2. Ayarlarda grup adı boşsa istediğiniz sohbeti açıp varsayılan #Max başla komutunu yazın.
 3. Max komutun yazıldığı sohbete kilitlenir ve yanıtları oraya gönderir.
 4. Ayarlarda grup adı yazıp kaydederseniz uygulama o grubu Chrome penceresinde açar.
 5. #?, #danışmanlar ve ilan arama komutlarını kullanabilirsiniz.
 6. #Max durdur cevap modunu kapatır; #Max başla yeniden açar.
-7. Ayarlardaki İlan linki kaynağı seçimi normal ilan komutlarının kullanacağı siteyi belirler.
+7. Ayarlardan komut işaretini, Max'in arayacağı kaynakları ve kullanacağı ilan alanlarını seçebilirsiniz.
+8. #danışmanlar komutu ayarlardan bağımsız olarak MyRE/MAX, Emlakjet ve Sahibinden ilan adetlerini karşılaştırır.
+9. Normal ilan aramaları “ilan” veya “link” yazılmasa da sonuç bağlantılarını gönderir.
 
 V0.38 YENİLİKLERİ
 - MyRE/MAX, Emlakjet ve Sahibinden kaynakları ayrı ayrı taranır.
@@ -63,5 +65,26 @@ V0.41.1 DÜZENLEMELERİ
 - Excel/CSV yükleme ve Excel dışa aktarma işlemleri Veri Ekle sayfasında toplandı.
 - İlanlar sayfasında yalnızca tarama, filtreleme ve seçili ilanı düzenleme işlemleri bırakıldı.
 - Dışa aktarılacak Sahibinden, Emlakjet veya MyRE/MAX listesi Veri Ekle sayfasından seçilebilir.
+
+V0.42.0 YENİLİKLERİ
+- İlan detay sayfalarındaki il, ilçe, mahalle, sokak/cadde, site/proje, açık adres, ilan açıklaması, brüt/net m² ve diğer özellikler kaynağında bulunduğu kadarıyla alınır.
+- Eksik adres veya ilan bilgisi tahmin edilmez; boş bırakılır.
+- Veri Ekle sayfasındaki YAPAY ZEKÂ EXCEL ŞABLONU düğmesi, Sahibinden linklerinin başka bir yapay zekâ ile hazırlanacağı boş dosyayı üretir.
+- Yapay zekâdan gelen Excel/CSV dosyasındaki ek sütunlar kaybolmadan ilan ayrıntılarına eklenir.
+- Dosya yüklenince Ayarlar'da seçilen iki MyRE/MAX ofisi ve Emlakjet ofisi sırayla otomatik taranabilir.
+- İlan listesinde birleşik bir Adres sütunu gösterilir; Excel ve CSV dışa aktarma bütün sabit ve ek ayrıntıları içerir.
+- Max komut işareti, arama kaynakları ve arama alanları Ayarlar'dan değiştirilebilir.
+- Danışmanlar komutu üç platformun tamamını karşılaştırır; diğer sorgular seçilen alan ve kaynaklara göre sıralanır.
+- İlan sorguları “ilan” veya “link” kelimesi bulunmasa da her zaman sonuç linklerini paylaşır.
+
+SAHİBİNDEN EXCEL AKIŞI
+1. Veri Ekle sayfasında YAPAY ZEKÂ EXCEL ŞABLONU düğmesine basın.
+2. Sahibinden ilan linklerini ve bu şablonu kullanacağınız yapay zekâya verin.
+3. Her ilanı ayrı satıra yazdırın; kaynakta olmayan hiçbir bilgiyi uydurmayın ve boş bırakın.
+4. Yapay zekânın doldurduğu .xlsx veya .csv dosyasını EXCEL / CSV YÜKLE ile içeri alın.
+5. Otomatik tarama açıksa MyRE/MAX ve Emlakjet kaynakları sırayla güncellenir. Bir tarama başarısızsa eski verisi korunur ve sonraki kaynak denenir.
+
+ÖRNEK AYARLANMIŞ KOMUT
+Komut işaretini ! yaptıysanız !Max başla, !?, !danışmanlar veya !yahya kaptan kiralık 3+1 yazın.
 
 Hazır Windows ve macOS paketleri GitHub Actions bölümündeki son başarılı çalıştırmanın Artifacts alanındadır.

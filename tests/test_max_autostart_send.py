@@ -1,4 +1,5 @@
 from pathlib import Path
+from remax_bot.whatsapp_webengine import classify_command
 ROOT=Path(__file__).resolve().parents[1]
 BOT=(ROOT/"src/remax_bot/whatsapp_webengine.py").read_text(encoding="utf-8")
 
@@ -7,9 +8,9 @@ def test_max_reader_autostarts_without_sidebar_button():
     assert "def _auto_start_when_ready" in BOT
 
 def test_start_command_is_max_only():
-    assert '"#max başla"' in BOT
-    assert '"#max başlat"' in BOT
-    assert '"#bot başlat"' not in BOT
+    assert classify_command("#max başla") == "start"
+    assert classify_command("#max başlat") == "start"
+    assert classify_command("#bot başlat") == "query"
 
 def test_compose_clears_before_inserting_once():
     compose=BOT[BOT.index("COMPOSE_MESSAGE_JS"):BOT.index("CLICK_SEND_JS")]

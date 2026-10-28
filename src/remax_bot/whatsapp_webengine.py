@@ -5,6 +5,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+from .settings_schema import normalize_command_prefix
+
 try:
     from PySide6.QtCore import QObject, QTimer, Signal
 except ImportError:
@@ -45,31 +47,41 @@ except ImportError:
             callback()
 
 
-MAX_INTRO = (
-    "Max: Merhaba, ben Max. İlan arama konusunda size yardımcı olacağım. "
-    "Komut listesini görmek için #? yazabilirsiniz."
-)
+def max_intro(prefix="#"):
+    p=normalize_command_prefix(prefix)
+    return (
+        "Max: Merhaba, ben Max. İlan arama konusunda size yardımcı olacağım. "
+        f"Komut listesini görmek için {p}? yazabilirsiniz."
+    )
 
-MAX_STOPPED = (
-    "Max: İlan arama botu durduruldu. "
-    "Yeniden başlatmak için #Max başla yazabilirsiniz."
-)
+
+def max_stopped(prefix="#"):
+    p=normalize_command_prefix(prefix)
+    return (
+        "Max: İlan arama botu durduruldu. "
+        f"Yeniden başlatmak için {p}Max başla yazabilirsiniz."
+    )
+
+
+MAX_INTRO = max_intro()
+MAX_STOPPED = max_stopped()
 
 
 def _normalized(value: str) -> str:
     return " ".join(str(value or "").split()).casefold()
 
 
-def classify_command(text: str) -> str:
+def classify_command(text: str,prefix="#") -> str:
+    p=normalize_command_prefix(prefix)
     value = str(text or "").strip()
-    if not value.startswith("#"):
+    if not value.startswith(p):
         return "ignore"
-    if value.endswith("#") and len(value) > 1:
+    if value.endswith(p) and len(value) > 1:
         value = value[:-1].rstrip()
     lowered = value.casefold()
-    if lowered in {"#max başla", "#max başlat"}:
+    if lowered in {f"{p}max başla".casefold(),f"{p}max başlat".casefold()}:
         return "start"
-    if lowered in {"#max dur", "#max durdur"}:
+    if lowered in {f"{p}max dur".casefold(),f"{p}max durdur".casefold()}:
         return "stop"
     return "query" if len(value) >= 2 else "ignore"
 
@@ -84,8 +96,9 @@ class RouteResult:
 class MessageRouter:
     """Routes stable WhatsApp snapshots and keeps Max in the selected chat."""
 
-    def __init__(self, response_fn: Callable[[str], str]):
+    def __init__(self, response_fn: Callable[[str], str],command_prefix="#"):
         self.response_fn = response_fn
+        self.command_prefix=normalize_command_prefix(command_prefix)
         self.configured_group = ""
         self.locked_chat_id = ""
         self.locked_chat_title = ""
@@ -93,6 +106,12 @@ class MessageRouter:
         self.seen = set()
         self._seen_order = deque()
         self.primed_chats = set()
+
+    def set_command_prefix(self,prefix):
+        self.command_prefix=normalize_command_prefix(prefix)
+
+    def start_command(self):
+        return f"{self.command_prefix}Max başla"
 
     def set_group(self, group: str):
         configured_group = " ".join(str(group or "").split())
@@ -173,7 +192,7 @@ class MessageRouter:
             if self.active:
                 result.status = f"Max aktif - {title} dinleniyor"
             else:
-                result.status = f"Max dinleyici hazır - {title} içinde #Max başla yazın"
+                result.status = f"Max dinleyici hazır - {title} içinde {self.start_command()} yazın"
             return result
 
         for message in messages:
@@ -188,22 +207,22 @@ class MessageRouter:
 
             self._remember(message_id)
 
-            action = classify_command(text)
+            action = classify_command(text,self.command_prefix)
 
             if action == "start":
                 if not self.configured_group and not self.locked_chat_id:
                     self.locked_chat_id = chat_id
                     self.locked_chat_title = title
                 self.active = True
-                result.replies.append(MAX_INTRO)
+                result.replies.append(max_intro(self.command_prefix))
                 result.status = f"Max aktif - {title} dinleniyor"
                 continue
 
             if action == "stop":
                 if self.active:
-                    result.replies.append(MAX_STOPPED)
+                    result.replies.append(max_stopped(self.command_prefix))
                 self.active = False
-                result.status = f"Max dinleyici hazır - {title} içinde #Max başla yazın"
+                result.status = f"Max dinleyici hazır - {title} içinde {self.start_command()} yazın"
                 continue
 
             if action != "query" or not self.active:
@@ -389,7 +408,7 @@ class EmbeddedWhatsAppBot(QObject):
           if(match) chatToken=match[1];
         }
 
-        if(!text || !text.startsWith('#')) continue;
+        if(!text) continue;
 
         const id=dataId || `${pre}::${text}`;
         if(!id) continue;
@@ -662,9 +681,10 @@ class EmbeddedWhatsAppBot(QObject):
         schedule: Optional[Callable[[int, Callable], None]] = None,
         initial_group: str = "",
         start_active: bool = False,
+        command_prefix: str = "#",
     ):
         super().__init__()
-        self.router = MessageRouter(response_fn)
+        self.router = MessageRouter(response_fn,command_prefix=command_prefix)
         self.page = page
         self.running = False
         self._read_pending = False
@@ -732,7 +752,7 @@ class EmbeddedWhatsAppBot(QObject):
             if self._activation_pending:
                 self._status("Max hazırlanıyor - açık sohbetteki eski mesajlar atlanıyor")
             else:
-                self._status("Max hazır - açık sohbette #Max başla bekleniyor")
+                self._status(f"Max hazır - açık sohbette {self.router.start_command()} bekleniyor")
         self._schedule(350, self.poll_once)
         return True
 
@@ -740,7 +760,7 @@ class EmbeddedWhatsAppBot(QObject):
         # Keep the lightweight reader alive so #Max başla can activate Max again.
         self._activation_pending = False
         self.router.active = False
-        self._status("Max pasif - tekrar başlatmak için sohbete #Max başla yazın")
+        self._status(f"Max pasif - tekrar başlatmak için sohbete {self.router.start_command()} yazın")
 
     def set_group(self, group: str):
         self._activation_pending = False
@@ -752,7 +772,11 @@ class EmbeddedWhatsAppBot(QObject):
             self._status(f"Kayıtlı grup uygulama içinde açılıyor: {self.router.configured_group}")
             self._open_group(self.router.configured_group)
         else:
-            self._status("Grup seçimi otomatik - #Max başla yazılan sohbet kullanılacak")
+            self._status(f"Grup seçimi otomatik - {self.router.start_command()} yazılan sohbet kullanılacak")
+        return True
+
+    def set_command_prefix(self,prefix):
+        self.router.set_command_prefix(prefix)
         return True
 
     def shutdown(self):

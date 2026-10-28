@@ -149,6 +149,10 @@ DETAIL_JS = r'''(() => {
 ''' + DEEP_HELPERS + r'''
   const text=deepText();
   const clean=s=>String(s||'').replace(/\s+/g,' ').trim();
+  const withSqm=value=>{const v=clean(value);return !v?'':/m(?:²|2)/i.test(v)?v:v+' m²';};
+  const provinces=new Set(
+    'adana|adıyaman|afyonkarahisar|ağrı|aksaray|amasya|ankara|antalya|ardahan|artvin|aydın|balıkesir|bartın|batman|bayburt|bilecik|bingöl|bitlis|bolu|burdur|bursa|çanakkale|çankırı|çorum|denizli|diyarbakır|düzce|edirne|elazığ|erzincan|erzurum|eskişehir|gaziantep|giresun|gümüşhane|hakkari|hatay|ığdır|ısparta|istanbul|izmir|kahramanmaraş|karabük|karaman|kars|kastamonu|kayseri|kilis|kırıkkale|kırklareli|kırşehir|kocaeli|konya|kütahya|malatya|manisa|mardin|mersin|muğla|muş|nevşehir|niğde|ordu|osmaniye|rize|sakarya|samsun|şanlıurfa|siirt|sinop|şırnak|sivas|tekirdağ|tokat|trabzon|tunceli|uşak|van|yalova|yozgat|zonguldak'.split('|')
+  );
   const lines=text.split('\n').map(x=>x.trim()).filter(Boolean);
   function afterLabel(label){
     const n=label.toLocaleLowerCase('tr-TR');
@@ -171,6 +175,7 @@ DETAIL_JS = r'''(() => {
   const emlak=afterLabel('Emlak Tipi');
   const date=afterLabel('Yayınlanma Tarihi');
   const gross=afterLabel('m2 (Brüt)')||afterLabel('m² (Brüt)')||afterLabel('m²')||afterLabel('m2');
+  const netSqm=afterLabel('m2 (Net)')||afterLabel('m² (Net)');
   const rooms=afterLabel('Oda Sayısı');
 
   let locationText='';
@@ -179,6 +184,29 @@ DETAIL_JS = r'''(() => {
     const before=lines.slice(Math.max(0,li-8),li);
     const locs=before.filter(x=>/\//.test(x)||/Mah\.|Köy|İzmit|Kocaeli|Kartepe|Başiskele|Derince|Körfez|Gölcük|Kandıra/i.test(x));
     if(locs.length) locationText=clean(locs[locs.length-1]);
+  }
+
+  let province=afterLabel('İl')||afterLabel('Şehir');
+  let district=afterLabel('İlçe');
+  let neighborhood=afterLabel('Mahalle')||afterLabel('Semt');
+  if(li>0 && (!province||!district||!neighborhood)){
+    const crumbs=lines.slice(Math.max(0,li-6),li).filter(x=>x!==title&&x!=='İlan Detayı'&&!/(?:₺|TL)/i.test(x)).slice(-3);
+    if(crumbs.length>=2&&provinces.has(clean(crumbs[0]).toLocaleLowerCase('tr-TR'))){province=province||crumbs[0];district=district||crumbs[1];if(crumbs.length>=3)neighborhood=neighborhood||crumbs[2];}
+  }
+  const street=afterLabel('Sokak/Cadde')||afterLabel('Sokak')||afterLabel('Cadde');
+  const complexName=afterLabel('Site/Proje')||afterLabel('Site Adı')||afterLabel('Proje Adı');
+  const fullAddress=afterLabel('Açık Adres')||afterLabel('Tam Adres')||afterLabel('Adres');
+  const description=firstDeep('#classifiedDescription,.classifiedDescription,[data-testid="description"],[class*="description"] [class*="content"]')||afterLabel('İlan Açıklaması')||afterLabel('Açıklama');
+  const details={};
+  const addDetail=(label,value)=>{label=clean(label);value=clean(value);if(label&&value&&!(label in details))details[label]=value;};
+  for(const row of deepAll('table tr')){
+    const cells=Array.from(row.querySelectorAll?.(':scope > th,:scope > td')||[]).map(x=>clean(x.innerText||x.textContent));
+    if(cells.length>=2)addDetail(cells[0],cells.slice(1).join(' '));
+  }
+  for(const label of deepAll('dt')){const value=label.nextElementSibling;if(value?.matches?.('dd'))addDetail(label.innerText||label.textContent,value.innerText||value.textContent);}
+  for(const item of deepAll('[class*="feature"] li,[class*="spec"] li,[class*="detail"] li,[class*="info"] li')){
+    const parts=String(item.innerText||'').split('\n').map(clean).filter(Boolean);
+    if(parts.length>=2)addDetail(parts[0],parts.slice(1).join(' '));
   }
 
   let phone='';
@@ -210,7 +238,10 @@ DETAIL_JS = r'''(() => {
   }
 
   return {url:location.href,listingId:clean(listingId),title:clean(title),price,location:locationText,rooms,
-          transaction,propertyType,sqm:gross?clean(gross)+' m²':'',listingDate:clean(date),advisor:clean(advisor),phone:clean(phone),
+          transaction,propertyType,sqm:withSqm(gross),listingDate:clean(date),advisor:clean(advisor),phone:clean(phone),
+          province:clean(province),district:clean(district),neighborhood:clean(neighborhood),street:clean(street),
+          complexName:clean(complexName),fullAddress:clean(fullAddress),description:clean(description),
+          netSqm:withSqm(netSqm),details,
           textLength:text.length,rootCount:deepRoots().length};
 })()'''
 
@@ -285,7 +316,17 @@ class EmbeddedRemaxScanner(QObject):
             m=re.search(r'P\d{6,}',url,re.I); lid=m.group(0).upper() if m else ''
         if lid and lid not in self.seen:
             self.seen.add(lid)
-            self.rows.append(Listing(lid,d.get('title') or f'Portföy {lid}',url,d.get('advisor') or '',d.get('phone') or '',d.get('price') or '',d.get('location') or '',d.get('rooms') or '',d.get('transaction') or '',d.get('propertyType') or '',d.get('sqm') or '',d.get('listingDate') or '',self.source))
+            self.rows.append(Listing(
+                listing_id=lid,title=d.get('title') or f'Portföy {lid}',url=url,
+                advisor=d.get('advisor') or '',phone=d.get('phone') or '',price=d.get('price') or '',
+                location=d.get('location') or '',rooms=d.get('rooms') or '',
+                transaction_type=d.get('transaction') or '',property_type=d.get('propertyType') or '',
+                sqm=d.get('sqm') or '',listing_date=d.get('listingDate') or '',source_url=self.source,
+                province=d.get('province') or '',district=d.get('district') or '',
+                neighborhood=d.get('neighborhood') or '',street=d.get('street') or '',
+                complex_name=d.get('complexName') or '',full_address=d.get('fullAddress') or '',
+                description=d.get('description') or '',net_sqm=d.get('netSqm') or '',details=d.get('details') or {},
+            ))
         self.progress.emit(f'{len(self.rows)} / {self.expected or "?"}')
         self.card_index+=1; self.phase='list'; self.returning=True
         self.status.emit(f'{len(self.rows)} ilan alındı. Listeye geri dönülüyor...')

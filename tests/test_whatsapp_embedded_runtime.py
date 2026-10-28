@@ -30,6 +30,24 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(classify_command("#MAX BAŞLAT"),"start")
         self.assertEqual(classify_command("#bot başlat"),"query")
 
+    def test_custom_prefix_controls_start_stop_and_query_classification(self):
+        self.assertEqual(classify_command("!Max başla",prefix="!"),"start")
+        self.assertEqual(classify_command("!Max durdur",prefix="!"),"stop")
+        self.assertEqual(classify_command("!izmit kiralık",prefix="!"),"query")
+        self.assertEqual(classify_command("#Max başla",prefix="!"),"ignore")
+
+    def test_custom_prefix_router_uses_dynamic_intro_and_ignores_old_prefix(self):
+        from remax_bot.whatsapp_webengine import max_intro
+
+        router=MessageRouter(lambda text:f"Sonuç: {text}",command_prefix="!")
+        router.process(snapshot(messages=[]))
+        old=router.process(snapshot(messages=[{"id":"old","text":"#Max başla"}]))
+        started=router.process(snapshot(messages=[{"id":"new","text":"!Max başla"}]))
+
+        self.assertEqual(old.replies,[])
+        self.assertEqual(started.replies,[max_intro("!")])
+        self.assertIn("!?",started.replies[0])
+
     def test_first_snapshot_is_only_primed(self):
         router=MessageRouter(lambda x:"x")
         result=router.process(snapshot(messages=[{"id":"old","text":"#Max başla"}]))

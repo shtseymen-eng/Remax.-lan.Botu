@@ -6,6 +6,8 @@ from remax_bot.playwright_scanner import (
     normalize_listing_url,
     is_valid_detail_listing,
     validate_scan_completeness,
+    normalize_detail_pairs,
+    PlaywrightScanner,
 )
 import pytest
 from remax_bot.core import Listing
@@ -63,6 +65,9 @@ def test_parse_listing_detail_extracts_core_fields():
     assert item.advisor == 'Ayşe Yılmaz'
     assert '0532' in item.phone
     assert item.url.endswith('/detay')
+    assert (item.province,item.district,item.neighborhood) == (
+        'Kocaeli','İzmit','Yahya Kaptan'
+    )
 
 
 def test_parse_listing_detail_replaces_store_name_with_named_advisor():
@@ -160,3 +165,83 @@ def test_scan_completeness_requires_known_total_all_links_and_all_details():
     with pytest.raises(RuntimeError,match='2 ilan linki bulundu; 1 ilan'):
         validate_scan_completeness(total=2,discovered=2,parsed=1)
     validate_scan_completeness(total=2,discovered=2,parsed=2)
+
+
+def test_sahibinden_detail_keeps_explicit_address_description_and_features():
+    item=parse_listing_detail(
+        text='İlan No: 1234567892\nKocaeli / İzmit / Yahya Kaptan\nSatılık Daire',
+        url='https://www.sahibinden.com/ilan/x-1234567892/detay',
+        source_url='https://carsigayrimenkulkocaeli.sahibinden.com/',
+        title='Site İçinde Satılık Daire',
+        details={
+            'Cadde':'Akasyalar Caddesi','Site Adı':'Zeray Sitesi',
+            'Adres':'Yahya Kaptan Mah. Akasyalar Cad. No: 10',
+            'Brüt m²':'145 m²','Net m²':'130 m²',
+            'Açıklama':'Ara kat, kapalı otoparklı daire','Isıtma':'Yerden Isıtma',
+        },
+    )
+
+    assert item.street == 'Akasyalar Caddesi'
+    assert item.complex_name == 'Zeray Sitesi'
+    assert item.full_address == 'Yahya Kaptan Mah. Akasyalar Cad. No: 10'
+    assert item.sqm == '145 m²'
+    assert item.net_sqm == '130 m²'
+    assert item.description == 'Ara kat, kapalı otoparklı daire'
+    assert item.details['Isıtma'] == 'Yerden Isıtma'
+
+
+def test_missing_address_components_stay_empty():
+    item=parse_listing_detail(
+        text='İlan No: 1234567893\nKocaeli / İzmit\nSatılık Daire',
+        url='https://www.sahibinden.com/ilan/x-1234567893/detay',
+        source_url='https://carsigayrimenkulkocaeli.sahibinden.com/',
+        title='Satılık Daire',
+    )
+
+    assert item.province == 'Kocaeli'
+    assert item.district == 'İzmit'
+    assert item.neighborhood == ''
+    assert item.street == ''
+    assert item.complex_name == ''
+    assert item.full_address == ''
+
+
+def test_property_taxonomy_is_not_invented_as_an_address():
+    item=parse_listing_detail(
+        text='İlan No: 1234567894\nEmlak / Konut / Satılık\nSatılık Daire',
+        url='https://www.sahibinden.com/ilan/x-1234567894/detay',
+        source_url='https://carsigayrimenkulkocaeli.sahibinden.com/',
+        title='Satılık Daire',
+    )
+
+    assert item.province == ''
+    assert item.district == ''
+    assert item.neighborhood == ''
+    assert item.location == ''
+
+
+def test_detail_pair_normalization_keeps_first_meaningful_value():
+    pairs=[
+        {'label':' Isıtma ','value':' Doğalgaz  Kombi '},
+        {'label':'Isıtma','value':'Soba'},
+        {'label':'','value':'değer'},
+        {'label':'Balkon','value':''},
+        ['Bulunduğu Kat','3'],
+    ]
+    assert normalize_detail_pairs(pairs) == {
+        'Isıtma':'Doğalgaz Kombi','Bulunduğu Kat':'3'
+    }
+
+
+def test_scanner_reads_structured_detail_pairs_from_page(tmp_path):
+    class Page:
+        def evaluate(self, _script):
+            return [
+                {'label':'Isıtma','value':'Doğalgaz Kombi'},
+                {'label':'Bina Yaşı','value':'5'},
+            ]
+
+    scanner=PlaywrightScanner(tmp_path)
+    assert scanner._read_detail_attributes(Page()) == {
+        'Isıtma':'Doğalgaz Kombi','Bina Yaşı':'5'
+    }

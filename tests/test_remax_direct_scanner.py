@@ -49,3 +49,62 @@ Telefon
     )
 
     assert item.advisor == 'Hatice Akpınar Davarcı'
+
+
+def test_parse_remax_detail_keeps_explicit_address_description_and_extra_features():
+    text='''İlan Detayı
+SATILIK SİTE İÇİNDE DAİRE
+6.250.000 ₺
+Kocaeli
+Başiskele
+Fatih Mah.
+Portföy No
+P87625079
+Emlak Tipi
+Daire / Satılık
+m2 (Brüt)
+148
+m2 (Net)
+128
+'''
+    details={
+        'İl':'Kocaeli','İlçe':'Başiskele','Mahalle':'Fatih Mah.',
+        'Cadde':'Gülümser Caddesi','Site Adı':'Zeray Güneşi',
+        'Açık Adres':'Fatih Mah. Gülümser Cad. No: 4',
+        'm2 (Net)':'128','Bina Yaşı':'0','İlan Açıklaması':'Bahçeli ara kat daire',
+    }
+
+    item=parse_remax_detail(
+        text=text,
+        url='https://remax.com.tr/tr/portfoy/P87625079',
+        source_url='https://remax.com.tr/tr/ofis/detay/carsi',
+        details=details,
+    )
+
+    assert (item.province,item.district,item.neighborhood) == ('Kocaeli','Başiskele','Fatih Mah.')
+    assert item.street == 'Gülümser Caddesi'
+    assert item.complex_name == 'Zeray Güneşi'
+    assert item.full_address == 'Fatih Mah. Gülümser Cad. No: 4'
+    assert item.net_sqm == '128 m²'
+    assert item.description == 'Bahçeli ara kat daire'
+    assert item.details['Bina Yaşı'] == '0'
+
+
+def test_remax_buttons_before_portfolio_number_are_not_invented_as_address():
+    item=parse_remax_detail(
+        text='''İlan Detayı
+SATILIK DAİRE
+Favorilere Ekle
+Teklif Ver
+Portföy No
+P87625080
+Emlak Tipi
+Daire / Satılık
+''',
+        url='https://remax.com.tr/tr/portfoy/P87625080',
+        source_url='https://remax.com.tr/tr/ofis/detay/carsi',
+    )
+
+    assert item.province == ''
+    assert item.district == ''
+    assert item.neighborhood == ''

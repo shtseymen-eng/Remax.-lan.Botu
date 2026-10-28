@@ -1,8 +1,10 @@
 from __future__ import annotations
 import re, sqlite3
-from dataclasses import dataclass,replace
+from dataclasses import dataclass,field,replace
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
+
+from .listing_details import details_text, details_to_json, normalize_details
 
 TR=str.maketrans("çÇğĞıİöÖşŞüÜ","ccggiioossuu")
 
@@ -53,6 +55,37 @@ class Listing:
     sqm:str=""
     listing_date:str=""
     source_url:str=""
+    province:str=""
+    district:str=""
+    neighborhood:str=""
+    street:str=""
+    complex_name:str=""
+    full_address:str=""
+    description:str=""
+    net_sqm:str=""
+    details:dict[str,str]=field(default_factory=dict)
+
+LISTING_DB_COLUMNS=(
+    "id","title","url","advisor","phone","price","location","rooms","trans","ptype",
+    "sqm","listing_date","source_url","province","district","neighborhood","street",
+    "complex_name","full_address","description","net_sqm","details_json",
+)
+LISTING_DB_COLUMN_SQL=",".join(LISTING_DB_COLUMNS)
+LISTING_DB_PLACEHOLDERS=",".join("?" for _ in LISTING_DB_COLUMNS)
+
+def _listing_values(item:Listing,source_url:str|None=None)->tuple:
+    return (
+        str(item.listing_id),item.title,item.url,item.advisor,item.phone,item.price,item.location,
+        item.rooms,item.transaction_type,item.property_type,item.sqm,item.listing_date,
+        source_url if source_url is not None else item.source_url,
+        item.province,item.district,item.neighborhood,item.street,item.complex_name,
+        item.full_address,item.description,item.net_sqm,details_to_json(item.details),
+    )
+
+def _listing_from_row(row)->Listing:
+    values=list(row)
+    values[-1]=normalize_details(values[-1])
+    return Listing(*values)
 
 def listing_identity(item:Listing)->str:
     if (item.url or "").strip():
@@ -62,10 +95,12 @@ def listing_identity(item:Listing)->str:
 def update_listing_fields(item:Listing,values:dict)->Listing:
     editable={
         "listing_id","title","url","advisor","phone","price","location","rooms",
-        "transaction_type","property_type","sqm","listing_date","source_url",
+        "transaction_type","property_type","sqm","listing_date","source_url","province",
+        "district","neighborhood","street","complex_name","full_address","description",
+        "net_sqm","details",
     }
     changes={
-        key:" ".join(str(value or "").split())
+        key:(normalize_details(value) if key=="details" else " ".join(str(value or "").split()))
         for key,value in values.items() if key in editable
     }
     updated=replace(item,**changes)
@@ -100,7 +135,27 @@ class DB:
                 advisor text not null default '',phone text not null default '',price text not null default '',
                 location text not null default '',rooms text not null default '',trans text not null default '',
                 ptype text not null default '',sqm text not null default '',listing_date text not null default '',
+                province text not null default '',district text not null default '',
+                neighborhood text not null default '',street text not null default '',
+                complex_name text not null default '',full_address text not null default '',
+                description text not null default '',net_sqm text not null default '',
+                details_json text not null default '{}',
                 primary key(source_url,id))""")
+            additions={
+                "province":"text not null default ''",
+                "district":"text not null default ''",
+                "neighborhood":"text not null default ''",
+                "street":"text not null default ''",
+                "complex_name":"text not null default ''",
+                "full_address":"text not null default ''",
+                "description":"text not null default ''",
+                "net_sqm":"text not null default ''",
+                "details_json":"text not null default '{}'",
+            }
+            current={r[1] for r in c.execute("pragma table_info(listings)").fetchall()}
+            for column,declaration in additions.items():
+                if column not in current:
+                    c.execute(f"alter table listings add column {column} {declaration}")
             c.execute("create table if not exists meta(k text primary key,v text)")
             c.execute("""create table if not exists advisor_aliases(
                 alias_key text primary key,alias_name text not null,canonical_name text not null
@@ -131,27 +186,26 @@ class DB:
         with self.connect() as c:
             c.execute('begin')
             c.execute('delete from listings where source_url=?',(key,))
-            c.executemany("""insert into listings
-                (source_url,id,title,url,advisor,phone,price,location,rooms,trans,ptype,sqm,listing_date)
-                values(?,?,?,?,?,?,?,?,?,?,?,?,?)""",[
-                (key,x.listing_id,x.title,x.url,x.advisor,x.phone,x.price,x.location,x.rooms,
-                 x.transaction_type,x.property_type,x.sqm,x.listing_date)
-                for x in items])
+            c.executemany(
+                f"insert into listings({LISTING_DB_COLUMN_SQL}) values({LISTING_DB_PLACEHOLDERS})",
+                [_listing_values(x,key) for x in items],
+            )
             c.commit()
 
     def upsert(self,items,default_source="excel://import"):
         with self.connect() as c:
             for x in items:
                 key=source_key(x.source_url or default_source)
-                c.execute("""insert into listings
-                    (source_url,id,title,url,advisor,phone,price,location,rooms,trans,ptype,sqm,listing_date)
-                    values(?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    on conflict(source_url,id) do update set
-                    title=excluded.title,url=excluded.url,advisor=excluded.advisor,phone=excluded.phone,
-                    price=excluded.price,location=excluded.location,rooms=excluded.rooms,trans=excluded.trans,
-                    ptype=excluded.ptype,sqm=excluded.sqm,listing_date=excluded.listing_date""",
-                    (key,x.listing_id,x.title,x.url,x.advisor,x.phone,x.price,x.location,x.rooms,
-                     x.transaction_type,x.property_type,x.sqm,x.listing_date))
+                updates=",".join(
+                    f"{column}=excluded.{column}"
+                    for column in LISTING_DB_COLUMNS if column not in {"source_url","id"}
+                )
+                c.execute(
+                    f"""insert into listings({LISTING_DB_COLUMN_SQL})
+                    values({LISTING_DB_PLACEHOLDERS})
+                    on conflict(source_url,id) do update set {updates}""",
+                    _listing_values(x,key),
+                )
 
     def add_one(self,x):
         self.upsert([x],x.source_url or "manual://entry")
@@ -166,20 +220,18 @@ class DB:
             ).fetchone():
                 raise ValueError("Bu kaynak ve ilan numarasıyla başka bir ilan zaten kayıtlı.")
             c.execute("delete from listings where source_url=? and id=?",original_key)
-            c.execute("""insert into listings
-                (source_url,id,title,url,advisor,phone,price,location,rooms,trans,ptype,sqm,listing_date)
-                values(?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
-                new_source,item.listing_id,item.title,item.url,item.advisor,item.phone,item.price,
-                item.location,item.rooms,item.transaction_type,item.property_type,item.sqm,item.listing_date,
-            ))
+            c.execute(
+                f"insert into listings({LISTING_DB_COLUMN_SQL}) values({LISTING_DB_PLACEHOLDERS})",
+                _listing_values(item,new_source),
+            )
 
     def raw_listing(self,source_url,listing_id):
         with self.connect() as c:
-            row=c.execute("""select id,title,url,advisor,phone,price,location,rooms,trans,ptype,sqm,listing_date,source_url
+            row=c.execute(f"""select {LISTING_DB_COLUMN_SQL}
                 from listings where source_url=? and id=?""",(
                 source_key(source_url),str(listing_id),
             )).fetchone()
-        return Listing(*row) if row else None
+        return _listing_from_row(row) if row else None
 
     @staticmethod
     def _resolve_advisor(name,mapping):
@@ -235,12 +287,11 @@ class DB:
 
     def all(self):
         with self.connect() as c:
-            rows=c.execute("""select id,title,url,advisor,phone,price,location,rooms,trans,ptype,sqm,listing_date,source_url
-                              from listings order by title""").fetchall()
+            rows=c.execute(f"select {LISTING_DB_COLUMN_SQL} from listings order by title").fetchall()
         mapping=self._advisor_alias_map()
         return [
             replace(item,advisor=self._resolve_advisor(item.advisor,mapping))
-            for item in (Listing(*r) for r in rows)
+            for item in (_listing_from_row(row) for row in rows)
         ]
 
     def source_count(self,source_url):
@@ -260,7 +311,7 @@ class DB:
         with self.connect() as c:
             c.execute('insert into meta values(?,?) on conflict(k) do update set v=excluded.v',(k,v))
 
-def search(items,query):
+def search(items,query,fields=None):
     tokens=[token for token in norm(query).split() if token]
     groups=[]
     for token in tokens:
@@ -270,12 +321,30 @@ def search(items,query):
             groups.append([token])
     if not groups:
         return items
+    selected=None if fields is None else set(fields)
     out=[]
     for x in items:
-        hay=norm(' '.join([
-            x.title,x.advisor,x.phone,x.price,x.location,x.rooms,
-            x.transaction_type,x.property_type,x.sqm,x.listing_date,source_label(x.source_url)
-        ]))
+        values={
+            "title":x.title,
+            "advisor":x.advisor,
+            "phone":x.phone,
+            "price":x.price,
+            "location":" ".join([
+                x.location,x.province,x.district,x.neighborhood,x.street,
+                x.complex_name,x.full_address,
+            ]),
+            "rooms":x.rooms,
+            "transaction_type":x.transaction_type,
+            "property_type":x.property_type,
+            "sqm":" ".join([x.sqm,x.net_sqm]),
+            "listing_date":x.listing_date,
+            "source":source_label(x.source_url),
+            "description":x.description,
+            "details":details_text(x.details),
+        }
+        hay=norm(" ".join(
+            value for name,value in values.items() if selected is None or name in selected
+        ))
         matches=lambda term:bool(re.search(rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])",hay))
         if all(any(matches(term) for term in alternatives) for alternatives in groups):
             out.append(x)

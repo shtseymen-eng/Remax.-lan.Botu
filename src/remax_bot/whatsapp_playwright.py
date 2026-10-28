@@ -7,6 +7,8 @@ from collections import deque
 from pathlib import Path
 from typing import Callable
 
+from .settings_schema import normalize_command_prefix
+
 from .whatsapp_webengine import (
     EmbeddedWhatsAppBot,
     MessageRouter,
@@ -53,7 +55,7 @@ EXTERNAL_SNAPSHOT_JS = r"""
       'span[class*="selectable-text"],[data-lexical-text="true"],[data-pre-plain-text]'
     );
     const text=clean(textNode?.innerText || meta?.innerText || row.innerText);
-    if(!text.startsWith('#')) continue;
+    if(!text) continue;
     const dataId=idNode?.getAttribute('data-id') || '';
     const pre=meta?.getAttribute('data-pre-plain-text') || '';
     if(!chatToken && dataId){
@@ -238,9 +240,10 @@ class WhatsAppConversationLoop:
         response_fn: Callable[[str], str],
         session,
         initial_group: str = "",
+        command_prefix: str = "#",
     ):
         self.session = session
-        self.router = MessageRouter(response_fn)
+        self.router = MessageRouter(response_fn,command_prefix=command_prefix)
         self.router.set_group(initial_group)
         self.activation_pending = False
         self.last_snapshot = None
@@ -316,11 +319,13 @@ class ExternalWhatsAppBot(QObject):
         start_active: bool = False,
         poll_seconds: float = 0.9,
         session_factory=None,
+        command_prefix: str = "#",
     ):
         super().__init__()
         self.response_fn = response_fn
         self.profile_dir = Path(profile_dir)
         self.group = " ".join(str(initial_group or "").split())
+        self.command_prefix=normalize_command_prefix(command_prefix)
         self._desired_active = bool(start_active)
         self._poll_seconds = max(0.5, float(poll_seconds))
         self._session_factory = session_factory or (
@@ -339,6 +344,9 @@ class ExternalWhatsAppBot(QObject):
     @property
     def active(self):
         return self._loop.active if self._loop is not None else self._desired_active
+
+    def _start_command(self):
+        return f"{self.command_prefix}Max başla"
 
     def _status(self, message: str):
         text = str(message or "").strip()
@@ -368,7 +376,7 @@ class ExternalWhatsAppBot(QObject):
     def stop(self):
         self._desired_active = False
         self._commands.put(("stop",))
-        self._status("Max pasif - Chrome'da #Max başla komutu bekleniyor")
+        self._status(f"Max pasif - Chrome'da {self._start_command()} komutu bekleniyor")
 
     def set_group(self, group: str):
         self.group = " ".join(str(group or "").split())
@@ -376,7 +384,12 @@ class ExternalWhatsAppBot(QObject):
         if self.group:
             self._status(f"Kayıtlı grup Chrome'da açılıyor: {self.group}")
         else:
-            self._status("Grup otomatik - #Max başla yazılan sohbet kullanılacak")
+            self._status(f"Grup otomatik - {self._start_command()} yazılan sohbet kullanılacak")
+        return True
+
+    def set_command_prefix(self,prefix):
+        self.command_prefix=normalize_command_prefix(prefix)
+        self._commands.put(("prefix",self.command_prefix))
         return True
 
     def show_browser(self):
@@ -392,7 +405,8 @@ class ExternalWhatsAppBot(QObject):
     def _apply_commands(self, loop, session):
         while True:
             try:
-                command = self._commands.get_nowait()[0]
+                queued = self._commands.get_nowait()
+                command = queued[0]
             except queue.Empty:
                 return
             if command == "shutdown":
@@ -407,6 +421,9 @@ class ExternalWhatsAppBot(QObject):
                 keep_active = loop.active or self._desired_active
                 loop.start(self.group, activate=keep_active)
                 continue
+            if command == "prefix":
+                loop.router.set_command_prefix(queued[1])
+                continue
             if command == "start":
                 loop.start(self.group, activate=True)
 
@@ -415,6 +432,7 @@ class ExternalWhatsAppBot(QObject):
             self.response_fn,
             session,
             initial_group=self.group,
+            command_prefix=self.command_prefix,
         )
         self._loop = loop
         loop.start(self.group, activate=self._desired_active)

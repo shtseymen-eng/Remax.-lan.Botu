@@ -184,6 +184,9 @@ Hatice Davarcı | RE/MAX ÇARŞI
     assert item.property_type == "Daire"
     assert item.listing_date == "21 Ağustos 2026"
     assert item.advisor == "Hatice Davarcı"
+    assert (item.province,item.district,item.neighborhood) == (
+        "Kocaeli","Derince","Yavuz Sultan Mahallesi"
+    )
 
 
 def test_emlakjet_detail_uses_current_advisor_card_and_rejects_listing_label():
@@ -213,3 +216,30 @@ def test_scanner_dispatches_each_supported_site():
     assert source_platform("https://remax.com.tr/tr/ofis/detay/carsi") == "remax"
     assert source_platform("https://www.emlakjet.com/emlak-ofisleri/remax-carsi-1662566") == "emlakjet"
     assert source_platform("https://carsigayrimenkulkocaeli.sahibinden.com/") == "sahibinden"
+
+
+def test_emlakjet_detail_keeps_explicit_address_description_and_features():
+    text="""Site İçinde Kiralık Daire
+Yavuz Sultan Mahallesi, Derince, Kocaeli - Haritada Gör
+18.000 ₺
+İlan Numarası 19754939
+Kategori Kiralık Daire
+"""
+    item=parse_emlakjet_detail(
+        text=text,
+        url="https://www.emlakjet.com/ilan/site-icinde-kiralik-daire-19754939",
+        source_url="https://www.emlakjet.com/emlak-ofisleri/remax-carsi-1662566",
+        details={
+            "Sokak":"Çınarlı Sokak","Site Adı":"Yakamoz Sitesi",
+            "Açık Adres":"Yavuz Sultan Mah. Çınarlı Sok. No: 8",
+            "Net":"90 m²","İlan Açıklaması":"Kapalı otoparklı ara kat daire",
+            "Isıtma":"Doğalgaz Kombi",
+        },
+    )
+
+    assert item.street == "Çınarlı Sokak"
+    assert item.complex_name == "Yakamoz Sitesi"
+    assert item.full_address == "Yavuz Sultan Mah. Çınarlı Sok. No: 8"
+    assert item.net_sqm == "90 m²"
+    assert item.description == "Kapalı otoparklı ara kat daire"
+    assert item.details["Isıtma"] == "Doğalgaz Kombi"

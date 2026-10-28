@@ -2,6 +2,14 @@ from __future__ import annotations
 import csv, re
 from pathlib import Path
 from .core import Listing, norm, source_site, listing_identity
+from .listing_details import details_text, display_address, normalize_details
+from .settings_schema import (
+    DEFAULT_SEARCH_FIELDS,
+    DEFAULT_SEARCH_SOURCES,
+    normalize_command_prefix,
+    normalize_search_fields,
+    normalize_search_sources,
+)
 
 FIELD_ALIASES={
  "listing_id":["ilan no","ilan numarasi","portfoy no","portfoy numarasi","id"],
@@ -9,15 +17,37 @@ FIELD_ALIASES={
  "phone":["telefon","cep telefonu","danisman telefonu","gsm"],
  "title":["baslik","ilan basligi","portfoy basligi","aciklama"],
  "price":["fiyat","ilan fiyati","bedel"],
- "location":["bolge","konum","lokasyon","il ilce mahalle","adres"],
+ "location":["bolge","konum","lokasyon","il ilce mahalle"],
  "rooms":["oda","oda sayisi"],
  "transaction_type":["satilik kiralik","islem tipi","durum","ilan tipi"],
  "property_type":["emlak turu","gayrimenkul turu","kategori","tip"],
- "sqm":["m2","metrekare","brut m2","net m2"],
+ "sqm":["m2","metrekare","brut m2"],
+ "net_sqm":["net m2","net metrekare"],
  "listing_date":["ilan tarihi","tarih","yayin tarihi"],
  "url":["ilan linki","link","url","portfoy linki"],
- "source_url":["kaynak","ofis","kaynak linki"]
+ "source_url":["kaynak","ofis","kaynak linki"],
+ "province":["il","sehir"],
+ "district":["ilce"],
+ "neighborhood":["mahalle","semt"],
+ "street":["sokak/cadde","sokak cadde","sokak","cadde"],
+ "complex_name":["site/proje","site proje","site adi","proje adi"],
+ "full_address":["acik adres","tam adres","adres"],
+ "description":["ilan aciklamasi","detayli aciklama"],
 }
+FIXED_EXPORT_FIELDS=[
+    ("listing_id","İlan No"),("title","Başlık"),("advisor","Danışman"),("phone","Telefon"),
+    ("price","Fiyat"),("location","Bölge"),("province","İl"),("district","İlçe"),
+    ("neighborhood","Mahalle"),("street","Sokak/Cadde"),("complex_name","Site/Proje"),
+    ("full_address","Açık Adres"),("rooms","Oda"),("transaction_type","Satılık Kiralık"),
+    ("property_type","Emlak Türü"),("sqm","Brüt m²"),("net_sqm","Net m²"),
+    ("listing_date","İlan Tarihi"),("description","İlan Açıklaması"),("url","İlan Linki"),
+    ("source_url","Kaynak"),
+]
+COMMON_DETAIL_HEADERS=[
+    "Bina Yaşı","Bulunduğu Kat","Kat Sayısı","Isıtma","Banyo Sayısı","Balkon","Eşyalı",
+    "Kullanım Durumu","Site İçerisinde","Aidat","Tapu Durumu","Krediye Uygun","Takas",
+    "Cephe","Otopark","Asansör",
+]
 NOISE_ADVISOR_TOKENS={
     "portfoy","konum","kocaeli","izmit","detayli","gayrimen","re/max","remax",
     "satilik","kiralik","telefon","iletisim","ada","parsel","mahalle","ilce",
@@ -40,13 +70,25 @@ def _map_headers(headers):
                 out[field]=nh[_h(a)]; break
     return out
 def _row_to_listing(row,mapping,default_source="excel://import"):
-    g=lambda f: str(row.get(mapping.get(f,""),"") or "").strip()
+    g=lambda f: "" if row.get(mapping.get(f,""),"") is None else str(row.get(mapping.get(f,""),"")).strip()
     url=g("url"); lid=g("listing_id")
     if not lid:
         m=re.search(r"(?:P)?(\d{5,})",url)
         lid=m.group(1) if m else str(abs(hash((g("title"),url,g("advisor")))))
     src=g("source_url") or default_source
-    return Listing(lid,g("title") or f"İlan {lid}",url,g("advisor"),g("phone"),g("price"),g("location"),g("rooms"),g("transaction_type"),g("property_type"),g("sqm"),g("listing_date"),src)
+    mapped_headers=set(mapping.values())
+    details=normalize_details({
+        str(header):value for header,value in row.items()
+        if header not in mapped_headers and str(header or "").strip() and value is not None and str(value).strip()
+    })
+    return Listing(
+        listing_id=lid,title=g("title") or f"İlan {lid}",url=url,advisor=g("advisor"),
+        phone=g("phone"),price=g("price"),location=g("location"),rooms=g("rooms"),
+        transaction_type=g("transaction_type"),property_type=g("property_type"),sqm=g("sqm"),
+        listing_date=g("listing_date"),source_url=src,province=g("province"),district=g("district"),
+        neighborhood=g("neighborhood"),street=g("street"),complex_name=g("complex_name"),
+        full_address=g("full_address"),description=g("description"),net_sqm=g("net_sqm"),details=details,
+    )
 def read_list_file(path):
     path=Path(path); ext=path.suffix.lower(); rows=[]
     if ext==".csv":
@@ -64,35 +106,97 @@ def read_list_file(path):
     if "title" not in mapping and "url" not in mapping: raise ValueError("Başlık veya İlan Linki sütunu bulunamadı.")
     return [_row_to_listing(r,mapping) for r in rows if any(str(v or "").strip() for v in r.values())]
 
+def _export_headers(items):
+    fixed=[header for _field,header in FIXED_EXPORT_FIELDS]
+    fixed_keys={_h(header) for header in fixed}
+    dynamic=sorted({
+        key for item in items for key in normalize_details(item.details)
+        if _h(key) not in fixed_keys
+    },key=lambda value:_h(value))
+    return fixed+dynamic
+
+def _export_row(item,headers):
+    row={header:getattr(item,field) for field,header in FIXED_EXPORT_FIELDS}
+    fixed_keys={_h(header) for _field,header in FIXED_EXPORT_FIELDS}
+    row.update({
+        key:value for key,value in normalize_details(item.details).items()
+        if _h(key) not in fixed_keys
+    })
+    return [row.get(header,"") for header in headers]
+
+def _style_xlsx_headers(ws,headers):
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment,Font,PatternFill
+    from openpyxl.utils import get_column_letter
+
+    for cell in ws[1]:
+        cell.font=Font(color="FFFFFF",bold=True)
+        cell.fill=PatternFill("solid",fgColor="0B4DB8")
+        cell.alignment=Alignment(horizontal="center",vertical="center",wrap_text=True)
+    widths={
+        "İlan No":14,"Başlık":42,"Danışman":26,"Telefon":18,"Fiyat":18,"Bölge":28,
+        "İl":16,"İlçe":18,"Mahalle":24,"Sokak/Cadde":28,"Site/Proje":26,"Açık Adres":46,
+        "Oda":12,"Satılık Kiralık":18,"Emlak Türü":20,"Brüt m²":14,"Net m²":14,
+        "İlan Tarihi":18,"İlan Açıklaması":60,"İlan Linki":48,"Kaynak":48,
+    }
+    for index,header in enumerate(headers,1):
+        ws.column_dimensions[get_column_letter(index)].width=widths.get(header,20)
+    ws.freeze_panes="A2"
+    ws.auto_filter.ref=ws.dimensions
+
 def write_list_file(path,items):
+    from openpyxl import Workbook
+
+    path=Path(path)
+    rows=list(items)
+    headers=_export_headers(rows)
+    if path.suffix.lower()==".csv":
+        path.parent.mkdir(parents=True,exist_ok=True)
+        with path.open("w",encoding="utf-8-sig",newline="") as stream:
+            writer=csv.writer(stream,delimiter=";")
+            writer.writerow(headers)
+            writer.writerows(_export_row(item,headers) for item in rows)
+        return path
+    if path.suffix.lower() != ".xlsx":
+        raise ValueError("Dışa aktarma dosyası .xlsx veya .csv uzantılı olmalıdır.")
+    wb=Workbook(); ws=wb.active; ws.title="İlan Listesi"
+    ws.append(headers)
+    link_column=headers.index("İlan Linki")+1
+    for item in rows:
+        ws.append(_export_row(item,headers))
+        if item.url:
+            cell=ws.cell(ws.max_row,link_column); cell.hyperlink=item.url; cell.style="Hyperlink"
+    _style_xlsx_headers(ws,headers)
+    path.parent.mkdir(parents=True,exist_ok=True)
+    wb.save(path)
+    return path
+
+def write_ai_template(path):
     from openpyxl import Workbook
     from openpyxl.styles import Alignment,Font,PatternFill
 
     path=Path(path)
-    if path.suffix.lower() != ".xlsx":
-        raise ValueError("Dışa aktarma dosyası .xlsx uzantılı olmalıdır.")
-    headers=[
-        "İlan No","Başlık","Danışman","Telefon","Fiyat","Bölge","Oda",
-        "Satılık Kiralık","Emlak Türü","m2","İlan Tarihi","İlan Linki","Kaynak",
-    ]
-    wb=Workbook(); ws=wb.active; ws.title="İlan Listesi"
+    if path.suffix.lower()!=".xlsx":
+        raise ValueError("Yapay zekâ şablonu .xlsx uzantılı olmalıdır.")
+    headers=[header for _field,header in FIXED_EXPORT_FIELDS]+COMMON_DETAIL_HEADERS
+    wb=Workbook(); ws=wb.active; ws.title="İlanlar"
     ws.append(headers)
-    for item in items:
-        ws.append([
-            item.listing_id,item.title,item.advisor,item.phone,item.price,item.location,
-            item.rooms,item.transaction_type,item.property_type,item.sqm,
-            item.listing_date,item.url,item.source_url,
-        ])
-        if item.url:
-            cell=ws.cell(ws.max_row,12); cell.hyperlink=item.url; cell.style="Hyperlink"
-    for cell in ws[1]:
+    _style_xlsx_headers(ws,headers)
+    notes=wb.create_sheet("Alan Açıklamaları")
+    notes.append(["Kural","Açıklama"])
+    notes.append(["Zorunlu alan","yalnızca İlan Linki zorunludur."])
+    notes.append(["Eksik bilgi","Kaynakta görünmeyen bilgileri tahmin etmeyin; boş bırakın."])
+    notes.append(["Ek alanlar","İlan sayfasındaki başka özellikleri yeni sütunlar olarak ekleyebilirsiniz."])
+    notes.append(["Bir satır bir ilan","Her ilanı ayrı satıra yazın ve başlıkları değiştirmeyin."])
+    for cell in notes[1]:
         cell.font=Font(color="FFFFFF",bold=True)
         cell.fill=PatternFill("solid",fgColor="0B4DB8")
         cell.alignment=Alignment(horizontal="center",vertical="center")
-    widths=[14,42,26,18,18,28,12,18,20,14,16,48,48]
-    for index,width in enumerate(widths,1):
-        ws.column_dimensions[chr(64+index)].width=width
-    ws.freeze_panes="A2"; ws.auto_filter.ref=ws.dimensions
+    notes.column_dimensions["A"].width=24
+    notes.column_dimensions["B"].width=90
+    notes.freeze_panes="A2"
+    notes.sheet_view.showGridLines=False
+    ws.sheet_view.showGridLines=False
     path.parent.mkdir(parents=True,exist_ok=True)
     wb.save(path)
     return path
@@ -118,79 +222,88 @@ def filter_listings(items,advisor="",transaction="",property_type="",location=""
     if advisor: rows=[x for x in rows if norm(x.advisor)==norm(advisor)]
     if transaction: rows=[x for x in rows if norm(transaction) in norm(x.transaction_type)]
     if property_type: rows=[x for x in rows if norm(property_type) in norm(x.property_type)]
-    if location: rows=[x for x in rows if norm(location) in norm(x.location)]
+    if location:
+        rows=[
+            x for x in rows
+            if norm(location) in norm(" ".join([
+                x.location,x.province,x.district,x.neighborhood,x.street,
+                x.complex_name,x.full_address,
+            ]))
+        ]
     if min_price is not None: rows=[x for x in rows if price_number(x.price) is not None and price_number(x.price)>=int(min_price)]
     if max_price is not None: rows=[x for x in rows if price_number(x.price) is not None and price_number(x.price)<=int(max_price)]
     if query:
         from .core import search
         rows=search(rows,query)
     return rows
-def command_help():
-    return """RE/MAX ÇARŞI İLAN BOTU KOMUTLARI
+def command_help(prefix="#"):
+    p=normalize_command_prefix(prefix)
+    return f"""RE/MAX ÇARŞI İLAN BOTU KOMUTLARI
 
-#Max başla / #Max başlat
+{p}Max başla / {p}Max başlat
 Max ilan arama botunu aktif eder.
 
-#Max durdur
+{p}Max durdur
 Max ilan arama botunu durdurur.
 
-#?
+{p}?
 Komut listesini gösterir.
 
-#danışmanlar
+{p}danışmanlar
 Gerçek danışmanları mevcut ilan adetleriyle listeler.
 
-#yahya kaptan kiralık 3+1
+{p}yahya kaptan kiralık 3+1
 Uygun ilanların linklerini danışman adıyla gönderir.
 
-#yahya kaptan kiralık 3+1 link
+{p}yahya kaptan kiralık 3+1 link
 Eski kullanım biçimidir; link kelimesi artık zorunlu değildir.
 
-#izmit kiralık dükkan-ofis
+{p}izmit kiralık dükkan-ofis
 Dükkan veya ofis türündeki kiralık ilanların linklerini gönderir.
 
-#izmit satılık ev-daire
+{p}izmit satılık ev-daire
 Ev veya daire türündeki satılık ilanların linklerini gönderir.
 
-#izmit kiralık 55 bin
+{p}izmit kiralık 55 bin
 55.000 TL ve altındaki uygun ilanları linkleriyle gönderir.
 
-#izmit satılık daire 4 milyon
+{p}izmit satılık daire 4 milyon
 4.000.000 TL ve altındaki uygun ilanları linkleriyle gönderir.
 
-#danışman ayşe
+{p}danışman ayşe
 Danışman adına göre ilanları bulur.
 
-#emlakjet izmit kiralık
+{p}emlakjet izmit kiralık
 Yalnızca Emlakjet listesindeki uygun ilanların linklerini gönderir.
 
-#sahibinden izmit satılık
+{p}sahibinden izmit satılık
 Yalnızca Sahibinden listesindeki uygun ilanların linklerini gönderir.
 
-#myremax yahya kaptan kiralık
+{p}myremax yahya kaptan kiralık
 Yalnızca MyRE/MAX listesindeki uygun ilanların linklerini gönderir.
 
-Komutta site adı yoksa Ayarlar bölümünde kayıtlı ilan linki kaynağı kullanılır.
-#danışmanlar komutu her zaman üç sitenin tamamını sayar.
+Komutta site adı yoksa Ayarlar bölümünde seçilen kaynaklar kullanılır.
+{p}danışmanlar komutu her zaman üç sitenin tamamını sayar.
 İlan aramalarında link kelimesi yazmanız gerekmez; sonuçlar doğrudan linkleriyle gönderilir.
 
 Komutun yalnızca başında # olması yeterlidir.
-Eski #komut# biçimi de desteklenir.
+Eski {p}komut{p} biçimi de desteklenir.
 
 Eski biçim örnekleri:
-#danışmanlar#
-#yahya kaptan kiralık 3+1#
-#izmit kiralık 55 bin#
-#izmit satılık daire 4 milyon#"""
-def _command_body(text):
+{p}danışmanlar{p}
+{p}yahya kaptan kiralık 3+1{p}
+{p}izmit kiralık 55 bin{p}
+{p}izmit satılık daire 4 milyon{p}""".replace("Komutun yalnızca başında #",f"Komutun yalnızca başında {p}")
+def _command_body(text,prefix="#"):
+    p=normalize_command_prefix(prefix)
     t=(text or "").strip()
-    if t=="#?": return "?",True
-    if len(t)<2 or not t.startswith("#"): return "",False
+    if t==p+"?": return "?",True
+    if len(t)<2 or not t.startswith(p): return "",False
     body=t[1:]
-    if body.endswith("#"): body=body[:-1]
+    if body.endswith(p): body=body[:-1]
     return body.strip(),True
-def parse_command(text):
-    body,ok=_command_body(text)
+def parse_command(text,prefix="#"):
+    body,ok=_command_body(text,prefix)
     if not ok:return {"type":"ignore"}
     if body=="?":return {"type":"help"}
     if not body:return {"type":"ignore"}
@@ -216,11 +329,37 @@ def parse_command(text):
             raw=direct[-1].group(0); target=int(re.sub(r"[^0-9]","",raw))
             body=(body[:direct[-1].start()]+" "+body[direct[-1].end():]).strip()
     return {"type":"search","query":body,"links":link,"target_price":target,"source":source}
-def command_response(items,text,limit=12,link_source=None):
+def _relevance_score(item,query,fields):
+    selected=set(fields)
+    values={
+        "title":item.title,
+        "advisor":item.advisor,
+        "location":" ".join([
+            item.location,item.province,item.district,item.neighborhood,item.street,
+            item.complex_name,item.full_address,
+        ]),
+        "phone":item.phone,"price":item.price,"rooms":item.rooms,
+        "transaction_type":item.transaction_type,"property_type":item.property_type,
+        "sqm":" ".join([item.sqm,item.net_sqm]),"listing_date":item.listing_date,
+        "description":item.description,"details":details_text(item.details),
+    }
+    weights={"location":8,"title":7,"advisor":7,"rooms":4,"transaction_type":4,"property_type":4}
+    tokens=[token for token in norm(query).split() if token]
+    score=0
+    normalized_query=norm(query)
+    for name,value in values.items():
+        if name not in selected: continue
+        hay=norm(value); weight=weights.get(name,1)
+        score+=sum(weight for token in tokens if token in hay)
+        if normalized_query and normalized_query in hay: score+=weight*4
+    return score
+
+def command_response(items,text,limit=12,link_source=None,prefix="#",search_sources=None,search_fields=None):
     from .core import search
-    cmd=parse_command(text)
+    p=normalize_command_prefix(prefix)
+    cmd=parse_command(text,prefix=p)
     if cmd["type"]=="ignore":return None
-    if cmd["type"]=="help":return command_help()
+    if cmd["type"]=="help":return command_help(prefix=p)
     if cmd["type"]=="advisors":
         unique_rows={}
         for x in items:
@@ -258,27 +397,36 @@ def command_response(items,text,limit=12,link_source=None):
             lines.append("")
         lines += ["",f"Toplam ilan: {len(unique_rows)}",f"Toplam danışman: {len(groups)}"]
         return "\n".join(lines)
-    configured_source=(
-        link_source if link_source in LINK_SOURCES
-        else ("MyRE/MAX" if link_source is not None else None)
-    )
-    selected_source=cmd.get("source") or configured_source
+    configured_source=(link_source if link_source in LINK_SOURCES else ("MyRE/MAX" if link_source is not None else None))
+    allowed_sources=None if search_sources is None else set(normalize_search_sources(search_sources))
+    requested_source=cmd.get("source")
+    selected_source=requested_source or (configured_source if allowed_sources is None else None)
     searchable=list(items)
-    if selected_source:
+    if requested_source and allowed_sources is not None and requested_source not in allowed_sources:
+        searchable=[]
+    elif selected_source:
         searchable=[x for x in searchable if source_site(x.source_url,x.url)==selected_source]
-    matches=search(searchable,cmd.get("query","")); target=cmd.get("target_price")
+    elif allowed_sources is not None:
+        searchable=[x for x in searchable if source_site(x.source_url,x.url) in allowed_sources]
+    fields=normalize_search_fields(search_fields) if search_fields is not None else list(DEFAULT_SEARCH_FIELDS)
+    query=cmd.get("query","")
+    matches=search(searchable,query,fields=fields)
+    matches=sorted(matches,key=lambda item:(-_relevance_score(item,query,fields),norm(item.title),str(item.listing_id)))
+    target=cmd.get("target_price")
     if target is not None:
         priced=[(price_number(x.price),x) for x in matches]; priced=[p for p in priced if p[0] is not None and p[0]<=target]
         matches=[x for _,x in sorted(priced,key=lambda p:p[0],reverse=True)]
     if not matches:
         if selected_source:return f"{selected_source} listesinde aramanıza uygun ilan bulunamadı."
+        if allowed_sources is not None:return "Seçili kaynaklarda aramanıza uygun ilan bulunamadı."
         if target is not None:return f"{target:,.0f} TL ve altında aramanıza uygun ilan bulunamadı.".replace(",",".")
         return "Aramanıza uygun ilan bulunamadı."
     if cmd.get("links") or target is not None:
         lines=[f"{target:,.0f} TL ve altında {len(matches)} uygun ilan bulundu:".replace(",",".")] if target is not None else [f"{len(matches)} uygun ilan bulundu:"]
         for x in (matches if target is not None else matches[:limit]):
             advisor=advisor_display_name(x.advisor)
-            lines += ["",x.title,f"{x.price} | {x.location}",f"Danışman: {advisor}",x.url or "(link yok)"]
+            address=display_address(x) or x.location
+            lines += ["",x.title,f"{x.price} | {address}",f"Danışman: {advisor}",x.url or "(link yok)"]
         return "\n".join(lines)
     by={}
     for x in matches:

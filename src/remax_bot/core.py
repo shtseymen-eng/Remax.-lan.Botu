@@ -182,6 +182,9 @@ class DB:
                 c.execute("drop table listings_legacy")
 
     def replace_source(self,source_url,items):
+        items=list(items)
+        if not items:
+            raise ValueError("Boş tarama sonucu şüpheli kabul edildi; eski ilanlar korundu.")
         key=source_key(source_url)
         with self.connect() as c:
             c.execute('begin')

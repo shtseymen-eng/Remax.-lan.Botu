@@ -1,3 +1,7 @@
+import sqlite3
+
+import pytest
+
 from remax_bot.core import norm,source_key,source_label,source_site,split_listings_by_site,DB,Listing,search
 
 def test_normalize():
@@ -35,6 +39,52 @@ def test_replace_source_keeps_other(tmp_path):
     db.replace_source(b,[Listing("2","B","u2",source_url=b)])
     db.replace_source(a,[Listing("3","C","u3",source_url=a)])
     assert db.count()==2 and db.source_count(a)==1 and db.source_count(b)==1
+
+
+def test_replace_source_removes_stale_rows_after_complete_snapshot(tmp_path):
+    db=DB(tmp_path/"complete-snapshot.sqlite")
+    source="https://remax.com.tr/tr/ofis/detay/carsi"
+    db.replace_source(source,[
+        Listing("1","Yayında kalacak","https://x/1",source_url=source),
+        Listing("2","Yayından kalkacak","https://x/2",source_url=source),
+    ])
+
+    db.replace_source(source,[
+        Listing("1","Güncel başlık","https://x/1",source_url=source),
+        Listing("3","Yeni ilan","https://x/3",source_url=source),
+    ])
+
+    assert [(item.listing_id,item.title) for item in db.all()] == [
+        ("1","Güncel başlık"),
+        ("3","Yeni ilan"),
+    ]
+
+
+def test_replace_source_rejects_empty_snapshot_and_preserves_existing_rows(tmp_path):
+    db=DB(tmp_path/"empty-snapshot.sqlite")
+    source="https://remax.com.tr/tr/ofis/detay/carsi"
+    original=Listing("1","Korunacak ilan","https://x/1",source_url=source)
+    db.replace_source(source,[original])
+
+    with pytest.raises(ValueError,match="Boş tarama"):
+        db.replace_source(source,[])
+
+    assert db.all() == [original]
+
+
+def test_replace_source_rolls_back_when_snapshot_insert_fails(tmp_path):
+    db=DB(tmp_path/"rollback-snapshot.sqlite")
+    source="https://remax.com.tr/tr/ofis/detay/carsi"
+    original=Listing("1","Korunacak ilan","https://x/1",source_url=source)
+    db.replace_source(source,[original])
+
+    with pytest.raises(sqlite3.IntegrityError):
+        db.replace_source(source,[
+            Listing("2","Çakışan birinci","https://x/2",source_url=source),
+            Listing("2","Çakışan ikinci","https://x/duplicate",source_url=source),
+        ])
+
+    assert db.all() == [original]
 
 def test_search_phone():
     assert len(search([Listing("1","A","u",phone="0532 111 22 33")],"0532"))==1

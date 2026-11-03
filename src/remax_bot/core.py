@@ -298,6 +298,35 @@ class DB:
         with self.connect() as c:
             return int(c.execute('select count(*) from listings where source_url=?',(source_key(source_url),)).fetchone()[0])
 
+    def source_counts(self):
+        with self.connect() as c:
+            rows=c.execute("""select source_url,count(*) from listings
+                group by source_url order by source_url""").fetchall()
+        return [(source_url,int(count)) for source_url,count in rows]
+
+    def delete_all(self):
+        with self.connect() as c:
+            before=c.total_changes
+            c.execute("delete from listings")
+            return c.total_changes-before
+
+    def delete_source(self,source_url):
+        with self.connect() as c:
+            before=c.total_changes
+            c.execute("delete from listings where source_url=?",(source_key(source_url),))
+            return c.total_changes-before
+
+    def delete_listings(self,identities):
+        keys=sorted({
+            (source_key(source_url),str(listing_id))
+            for source_url,listing_id in identities
+        })
+        if not keys:return 0
+        with self.connect() as c:
+            before=c.total_changes
+            c.executemany("delete from listings where source_url=? and id=?",keys)
+            return c.total_changes-before
+
     def count(self):
         with self.connect() as c:
             return int(c.execute('select count(*) from listings').fetchone()[0])

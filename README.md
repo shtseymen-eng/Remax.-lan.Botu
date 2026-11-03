@@ -10,6 +10,7 @@ Windows ve macOS üzerinde çalışan ilan yönetimi ve WhatsApp yanıt uygulama
 - İlan detay sayfalarından kaynakta bulunan il, ilçe, mahalle, sokak/cadde, site/proje, açık adres, açıklama, brüt/net m² ve diğer özellikleri toplar; eksik bilgiyi tahmin etmez.
 - Sahibinden ilanlarını başka bir yapay zekâ ile hazırlamak için uygulama içinden boş **REMAX İlan Bot Şablon.xlsx** dosyası üretir.
 - Tabloda seçilen bir ilanın hatalı alanlarını uygulama içinde düzenleyip günceller.
+- İlanlar ekranında seçili ilanları, veritabanındaki gerçek bir kaynağın bütün ilanlarını veya bütün ilan havuzunu kayıt sayısını gösterip onay aldıktan sonra kalıcı olarak siler.
 - `#danışmanlar` komutunda her danışmanın üç sitedeki ilan adetlerini ayrı ayrı gösterir.
 - Excel/CSV dosyalarından veya manuel girişten ilan ekler.
 - İlanları danışman, konum, tür ve fiyata göre filtreler.
@@ -67,11 +68,20 @@ Normal ilan sorguları, Ayarlar bölümünde işaretli kaynaklardaki ve işaretl
 1. **İlanlar** sayfasındaki kaynak listesinden MyRE/MAX, Emlakjet veya Sahibinden kaynağını seçin.
 2. **TARA / GÜNCELLE** düğmesine basın.
 3. Site güvenlik doğrulaması isterse açılan tarama penceresinde doğrulamayı tamamlayın.
-4. Tarama eksik kalırsa o kaynağın önceki ilanları korunur; başarılı olursa yalnızca seçilen kaynak yenilenir.
+4. Tarama eksik kalırsa, başarısız olursa veya şüpheli biçimde boş sonuç verirse o kaynağın önceki ilanları korunur.
+5. Tarama kaynakta görünen toplam ilan sayısını, bulunan linkleri ve okunan ayrıntıları eksiksiz doğrularsa yalnızca seçilen kaynak yenilenir; artık yayında olmayan eski ilanlar bu tam güncellemede otomatik kaldırılır.
 
 Dosya yükleme ve dışa aktarma işlemleri **Veri Ekle** sayfasında birlikte bulunur. Sahibinden ilan linklerini başka bir yapay zekâya verdiğinizde önce **YAPAY ZEKÂ EXCEL ŞABLONU** düğmesiyle üretilen dosyayı kullandırın. Yapay zekâ her ilanı ayrı satıra yazmalı, kaynaktaki bütün görünen alanları doldurmalı, bulunmayan bilgileri boş bırakmalı ve yeni ayrıntıları ek sütunlar olarak korumalıdır. Bu Excel/CSV dosyasını **EXCEL / CSV YÜKLE** ile içeri alın. Ayarlar'daki otomatik tarama açıksa seçilen MyRE/MAX ve Emlakjet kaynakları bundan sonra tek tek güncellenir; bir kaynak başarısız olsa bile sıradaki kaynak denenir ve eski kayıtlar korunur.
 
 Sahibinden, Emlakjet veya MyRE/MAX kaynağını seçip **VERİLERİ EXCEL'E AKTAR** düğmesiyle `.xlsx` veya `.csv` kaydedebilirsiniz. Bir satırı düzeltmek için İlanlar sayfasında satırı seçip **SEÇİLİ İLANI DÜZENLE** düğmesine basın. Kaynak ve ayrıntı sütunları dışa aktarılan dosyada korunduğu için dosya yeniden yüklendiğinde ilanlar doğru site sekmesine ve alanlara döner.
+
+İlan silmek için **İlanlar** sayfasındaki temizleme araçlarını kullanın:
+
+1. Bir veya birden fazla satırı seçip **SEÇİLİ İLANLARI SİL** ile yalnızca bu kayıtları silebilirsiniz.
+2. Kaynak listesinden RE/MAX ÇARŞI, ÇARŞI 2, Sahibinden, Emlakjet, Excel/CSV veya manuel gibi veritabanında gerçekten bulunan bir kaynağı seçip **KAYNAĞI SİL** ile o kaynağın bütün kayıtlarını silebilirsiniz.
+3. **TÜM İLANLARI SİL** bütün kaynaklardaki ilanları temizler.
+
+Her üç işlem de silinecek kesin kayıt sayısını gösterir ve siz onay vermeden veritabanında değişiklik yapmaz. Silme tamamlandığında tablolar, filtreler, sayaçlar ve danışman listeleri yenilenir; Max'in sonraki araması güncel ilan havuzunu kullanır. Danışman isim birleştirme kuralları gelecek taramalarda kullanılmak üzere korunur.
 
 Danışman yazım farklılıklarını düzeltmek için **Ayarlar > Danışman İsimlerini Birleştir** alanında isimleri işaretleyin, kullanılacak ana ismi seçin veya yazın ve **BİRLEŞTİR VE GÜNCELLE** düğmesine basın. Sadece işaretlenen isimler birleşir; kural sonraki tarama ve yüklemelere de uygulanır. Aynı alandan birleştirmeyi kaldırabilirsiniz.
 

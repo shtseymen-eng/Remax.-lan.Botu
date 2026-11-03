@@ -324,6 +324,7 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         ])
         table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         table.itemSelectionChanged.connect(lambda t=table:self._remember_listing_table(t))
         [table.horizontalHeader().setSectionResizeMode(c,QHeaderView.Stretch) for c in [1,3,5,6,11]]
         table.cellDoubleClicked.connect(lambda row,_col,t=table:self.open_link(t,row))
@@ -375,6 +376,30 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         actions.addWidget(editb)
         actions.addStretch()
         ll.addLayout(actions)
+
+        delete_actions=QHBoxLayout()
+        delete_actions.addWidget(QLabel('İlan temizleme:'))
+
+        self.delete_source_combo=QComboBox()
+        self.delete_source_combo.setMinimumWidth(270)
+        delete_actions.addWidget(self.delete_source_combo)
+
+        self.delete_source_button=QPushButton('KAYNAĞI SİL')
+        self.delete_source_button.setObjectName('red')
+        self.delete_source_button.clicked.connect(self.delete_source_listings)
+        delete_actions.addWidget(self.delete_source_button)
+
+        delete_selected_button=QPushButton('SEÇİLİ İLANLARI SİL')
+        delete_selected_button.setObjectName('red')
+        delete_selected_button.clicked.connect(self.delete_selected_listings)
+        delete_actions.addWidget(delete_selected_button)
+
+        self.delete_all_button=QPushButton('TÜM İLANLARI SİL')
+        self.delete_all_button.setObjectName('red')
+        self.delete_all_button.clicked.connect(self.delete_all_listings)
+        delete_actions.addWidget(self.delete_all_button)
+        delete_actions.addStretch()
+        ll.addLayout(delete_actions)
 
         note=QLabel('TARA / GÜNCELLE seçilen kaynağı açar. Dosya yükleme ve Excel dışa aktarma işlemleri Veri Ekle sayfasından yapılır.')
         note.setWordWrap(True)
@@ -748,6 +773,8 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
             self.advisor_filter.setCurrentIndex(i if i>=0 else 0)
             self.advisor_filter.blockSignals(False)
 
+        self._refresh_delete_sources()
+
         self.fill(all_rows if rows is None else rows)
         if hasattr(self,'advisor_merge_list'):
             self.refresh_advisor_merge_list()
@@ -796,6 +823,101 @@ QTabBar::tab:selected{{background:white;border-top:3px solid {BLUE}}}''')
         self.trans_filter.setCurrentIndex(0)
         for w in [self.location_filter,self.min_price,self.max_price,self.searchbox]:
             w.clear()
+        self.refresh()
+
+    def _refresh_delete_sources(self):
+        if not hasattr(self,'delete_source_combo'):return
+        current=self.delete_source_combo.currentData()
+        sources=self.db.source_counts()
+        self.delete_source_combo.blockSignals(True)
+        self.delete_source_combo.clear()
+        for source,count in sources:
+            self.delete_source_combo.addItem(f'{source_label(source)} ({count})',source)
+        if not sources:
+            self.delete_source_combo.addItem('Silinecek kaynak yok',None)
+        elif current:
+            index=self.delete_source_combo.findData(current)
+            if index>=0:self.delete_source_combo.setCurrentIndex(index)
+        self.delete_source_combo.blockSignals(False)
+        if hasattr(self,'delete_source_button'):
+            self.delete_source_button.setEnabled(bool(sources))
+        if hasattr(self,'delete_all_button'):
+            self.delete_all_button.setEnabled(self.db.count()>0)
+
+    def _confirm_listing_delete(self,title,count,detail):
+        message=(
+            f'{detail}\n\nEtkilenecek kayıt sayısı: {count}\n\n'
+            'Bu işlem kalıcıdır. Devam etmek istiyor musunuz?'
+        )
+        buttons=QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No
+        answer=QMessageBox.question(
+            self,title,message,buttons,QMessageBox.StandardButton.No
+        )
+        return answer==QMessageBox.StandardButton.Yes
+
+    def _selected_listing_identities(self):
+        current_table=self.listing_tabs.currentWidget()
+        table=self._last_listing_table
+        if table is None or not table.selectionModel().hasSelection():
+            table=current_table
+        identities=[]; seen=set()
+        for index in table.selectionModel().selectedRows():
+            cell=table.item(index.row(),0)
+            identity=cell.data(Qt.UserRole) if cell else None
+            if not isinstance(identity,(tuple,list)) or len(identity)!=2:continue
+            key=(str(identity[0]),str(identity[1]))
+            if key not in seen:
+                seen.add(key); identities.append(key)
+        return identities
+
+    def delete_selected_listings(self):
+        identities=[
+            identity for identity in self._selected_listing_identities()
+            if self.db.raw_listing(*identity) is not None
+        ]
+        count=len(identities)
+        if not count:
+            QMessageBox.warning(self,'Seçili İlanları Sil','Silmek için tablodan en az bir ilan seçin.')
+            return
+        if not self._confirm_listing_delete(
+            'Seçili İlanları Sil',count,'Seçtiğiniz ilanlar veritabanından silinecek.'
+        ):return
+        deleted=self.db.delete_listings(identities)
+        self._last_listing_table=None
+        QMessageBox.information(self,'Seçili İlanları Sil',f'{deleted} ilan kalıcı olarak silindi.')
+        self.refresh()
+
+    def delete_source_listings(self):
+        source=self.delete_source_combo.currentData()
+        if not source:
+            QMessageBox.warning(self,'Kaynağı Sil','Silinecek bir ilan kaynağı bulunamadı.')
+            return
+        count=self.db.source_count(source)
+        label=source_label(source)
+        if not count:
+            QMessageBox.warning(self,'Kaynağı Sil',f'{label} kaynağında silinecek ilan yok.')
+            self.refresh()
+            return
+        if not self._confirm_listing_delete(
+            'Kaynağı Sil',count,f'{label} kaynağındaki bütün ilanlar silinecek.'
+        ):return
+        deleted=self.db.delete_source(source)
+        self._last_listing_table=None
+        QMessageBox.information(self,'Kaynağı Sil',f'{label}: {deleted} ilan kalıcı olarak silindi.')
+        self.refresh()
+
+    def delete_all_listings(self):
+        count=self.db.count()
+        if not count:
+            QMessageBox.warning(self,'Tüm İlanları Sil','Veritabanında silinecek ilan yok.')
+            self.refresh()
+            return
+        if not self._confirm_listing_delete(
+            'Tüm İlanları Sil',count,'Bütün kaynaklardaki ilanlar silinecek.'
+        ):return
+        deleted=self.db.delete_all()
+        self._last_listing_table=None
+        QMessageBox.information(self,'Tüm İlanları Sil',f'{deleted} ilan kalıcı olarak silindi.')
         self.refresh()
 
     def scan_selected(self):

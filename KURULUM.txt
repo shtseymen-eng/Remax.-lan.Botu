@@ -1,4 +1,4 @@
-RE/MAX İlan Botu V0.42.0 - Ayrıntılı İlan Havuzu ve Ayarlanabilir Max
+RE/MAX İlan Botu V0.43.0 - Güvenli İlan Temizleme ve Güncel Kaynaklar
 
 ÇALIŞMA ŞEKLİ
 1. Uygulamanın otomatik açtığı ayrı Google Chrome penceresinde WhatsApp Web oturumu açın. İlk kullanımda QR kodunu okutun.
@@ -76,6 +76,13 @@ V0.42.0 YENİLİKLERİ
 - Max komut işareti, arama kaynakları ve arama alanları Ayarlar'dan değiştirilebilir.
 - Danışmanlar komutu üç platformun tamamını karşılaştırır; diğer sorgular seçilen alan ve kaynaklara göre sıralanır.
 - İlan sorguları “ilan” veya “link” kelimesi bulunmasa da her zaman sonuç linklerini paylaşır.
+
+V0.43.0 YENİLİKLERİ
+- İlanlar ekranında seçilen birden fazla ilan, gerçek bir kaynak veya bütün ilan havuzu kalıcı olarak temizlenebilir.
+- Her silme işleminden önce etkilenecek kesin kayıt sayısı gösterilir ve kullanıcı onayı istenir.
+- Silme sonrasında tablolar, filtreler, sayaçlar, danışman listeleri ve Max'in sonraki arama sonuçları güncel veritabanını kullanır.
+- Tam ve başarılı kaynak taraması artık yayında olmayan eski ilanları kaldırır.
+- Başarısız, yarım veya şüpheli biçimde boş taramalar mevcut kayıtları korur.
 
 SAHİBİNDEN EXCEL AKIŞI
 1. Veri Ekle sayfasında YAPAY ZEKÂ EXCEL ŞABLONU düğmesine basın.

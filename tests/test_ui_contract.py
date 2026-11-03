@@ -1,4 +1,7 @@
 from pathlib import Path
+from types import SimpleNamespace
+
+import remax_bot.app as app_module
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -121,3 +124,225 @@ def test_automatic_scan_failure_remains_visible_to_the_user():
 
     assert "QMessageBox.warning(self,'Tarama',msg)" in failed
     assert "if not automatic" not in failed
+
+
+class _FakeButton:
+    def __init__(self):
+        self.enabled = None
+
+    def setEnabled(self, enabled):
+        self.enabled = bool(enabled)
+
+
+class _FakeCombo:
+    def __init__(self, current_data=None):
+        self.items = []
+        self.index = -1
+        self._current_data = current_data
+
+    def currentData(self):
+        if 0 <= self.index < len(self.items):
+            return self.items[self.index][1]
+        return self._current_data
+
+    def currentText(self):
+        if 0 <= self.index < len(self.items):
+            return self.items[self.index][0]
+        return ""
+
+    def blockSignals(self, _blocked):
+        pass
+
+    def clear(self):
+        self.items = []
+        self.index = -1
+
+    def addItem(self, text, data=None):
+        self.items.append((text, data))
+        if self.index < 0:
+            self.index = 0
+
+    def findData(self, data):
+        return next((i for i, item in enumerate(self.items) if item[1] == data), -1)
+
+    def setCurrentIndex(self, index):
+        self.index = index
+
+
+class _FakeIndex:
+    def __init__(self, row):
+        self._row = row
+
+    def row(self):
+        return self._row
+
+
+class _FakeCell:
+    def __init__(self, identity):
+        self.identity = identity
+
+    def data(self, _role):
+        return self.identity
+
+
+class _FakeTable:
+    def __init__(self, identities):
+        self.identities = identities
+
+    def selectionModel(self):
+        return self
+
+    def hasSelection(self):
+        return bool(self.identities)
+
+    def selectedRows(self):
+        return [_FakeIndex(row) for row in range(len(self.identities))]
+
+    def item(self, row, column):
+        assert column == 0
+        identity = self.identities[row]
+        return _FakeCell(identity) if identity else None
+
+
+def test_listing_deletion_controls_keep_the_existing_layout_and_allow_multi_select():
+    table = APP[APP.index("    def _new_listing_table(self):"):APP.index("    def _listings(self):")]
+    listings = APP[APP.index("    def _listings(self):"):APP.index("    def _data(self):")]
+
+    assert "setSelectionMode(QAbstractItemView.ExtendedSelection)" in table
+    assert "self.delete_source_combo=QComboBox()" in listings
+    assert "SEÇİLİ İLANLARI SİL" in listings
+    assert "KAYNAĞI SİL" in listings
+    assert "TÜM İLANLARI SİL" in listings
+
+
+def test_delete_confirmation_shows_count_and_defaults_to_no(monkeypatch):
+    captured = {}
+
+    def question(_parent, title, message, buttons, default):
+        captured.update(title=title, message=message, buttons=buttons, default=default)
+        return app_module.QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(app_module.QMessageBox, "question", question)
+
+    confirmed = app_module.Main._confirm_listing_delete(
+        object(), "Seçili İlanları Sil", 7, "Seçili kayıtlar silinecek."
+    )
+
+    assert not confirmed
+    assert "7" in captured["message"]
+    assert "kalıcı" in captured["message"].casefold()
+    assert captured["default"] == app_module.QMessageBox.StandardButton.No
+    assert captured["buttons"] & app_module.QMessageBox.StandardButton.Yes
+
+
+def test_delete_source_picker_uses_real_database_sources_and_preserves_selection():
+    carsi_2 = "https://remax.com.tr/tr/ofis/detay/carsi-2"
+    combo = _FakeCombo(current_data=carsi_2)
+    source_button = _FakeButton()
+    all_button = _FakeButton()
+    fake = SimpleNamespace(
+        db=SimpleNamespace(
+            source_counts=lambda: [("excel://import/", 3), (carsi_2, 2)],
+            count=lambda: 5,
+        ),
+        delete_source_combo=combo,
+        delete_source_button=source_button,
+        delete_all_button=all_button,
+    )
+
+    app_module.Main._refresh_delete_sources(fake)
+
+    assert combo.items == [
+        ("EXCEL / LİSTE (3)", "excel://import/"),
+        ("MyRE/MAX ÇARŞI 2 (2)", carsi_2),
+    ]
+    assert combo.currentData() == carsi_2
+    assert source_button.enabled
+    assert all_button.enabled
+
+
+def test_selected_listing_identities_are_deduplicated_from_selected_rows():
+    table = _FakeTable([
+        ("manual://entry/", "1"),
+        ("manual://entry/", "1"),
+        ("excel://import/", "2"),
+        None,
+    ])
+    fake = SimpleNamespace(
+        _last_listing_table=table,
+        listing_tabs=SimpleNamespace(currentWidget=lambda: table),
+    )
+
+    assert app_module.Main._selected_listing_identities(fake) == [
+        ("manual://entry/", "1"),
+        ("excel://import/", "2"),
+    ]
+
+
+def test_all_and_source_deletions_use_current_counts_then_refresh(monkeypatch):
+    events = []
+    source = "manual://entry/"
+
+    class DB:
+        def count(self): return 4
+        def source_count(self, value):
+            assert value == source
+            return 2
+        def delete_all(self):
+            events.append(("delete_all",))
+            return 4
+        def delete_source(self, value):
+            events.append(("delete_source", value))
+            return 2
+
+    fake = SimpleNamespace(
+        db=DB(),
+        delete_source_combo=_FakeCombo(current_data=source),
+        _last_listing_table=object(),
+        _confirm_listing_delete=lambda title, count, detail: events.append(
+            ("confirm", title, count, detail)
+        ) or True,
+        refresh=lambda: events.append(("refresh",)),
+    )
+    monkeypatch.setattr(app_module.QMessageBox, "information", lambda *_args: None)
+    monkeypatch.setattr(app_module.QMessageBox, "warning", lambda *_args: None)
+
+    app_module.Main.delete_source_listings(fake)
+    app_module.Main.delete_all_listings(fake)
+
+    assert ("delete_source", source) in events
+    assert ("delete_all",) in events
+    assert [event[2] for event in events if event[0] == "confirm"] == [2, 4]
+    assert events.count(("refresh",)) == 2
+    assert fake._last_listing_table is None
+
+
+def test_selected_deletion_counts_existing_records_and_refreshes(monkeypatch):
+    events = []
+    identities = [("manual://entry/", "1"), ("excel://import/", "2")]
+
+    class DB:
+        def raw_listing(self, source, listing_id):
+            return object() if (source, listing_id) in identities else None
+        def delete_listings(self, values):
+            events.append(("delete_listings", list(values)))
+            return len(values)
+
+    fake = SimpleNamespace(
+        db=DB(),
+        _last_listing_table=object(),
+        _selected_listing_identities=lambda: identities + [("manual://entry/", "missing")],
+        _confirm_listing_delete=lambda title, count, detail: events.append(
+            ("confirm", title, count, detail)
+        ) or True,
+        refresh=lambda: events.append(("refresh",)),
+    )
+    monkeypatch.setattr(app_module.QMessageBox, "information", lambda *_args: None)
+    monkeypatch.setattr(app_module.QMessageBox, "warning", lambda *_args: None)
+
+    app_module.Main.delete_selected_listings(fake)
+
+    assert ("delete_listings", identities) in events
+    assert next(event[2] for event in events if event[0] == "confirm") == 2
+    assert events[-1] == ("refresh",)
+    assert fake._last_listing_table is None

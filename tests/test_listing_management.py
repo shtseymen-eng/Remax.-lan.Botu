@@ -1,6 +1,6 @@
 import pytest
 
-from remax_bot.core import DB, Listing, split_listings_by_site
+from remax_bot.core import DB, Listing, source_key, split_listings_by_site
 from remax_bot import core, importer
 
 
@@ -97,3 +97,71 @@ def test_listing_editor_returns_all_corrected_fields():
     assert edited.property_type == "Ofis"
     assert edited.listing_id == "1"
     assert edited.source_url == "https://remax.com.tr/tr/ofis/detay/carsi"
+
+
+def test_source_counts_lists_real_normalized_sources(tmp_path):
+    db = DB(tmp_path / "source-counts.sqlite")
+    carsi = "https://remax.com.tr/tr/ofis/detay/carsi?tab=portfoylerimiz"
+    imported = "excel://import"
+    db.upsert([
+        Listing("1", "Bir", "https://x/1", source_url=carsi),
+        Listing("2", "İki", "https://x/2", source_url=carsi),
+        Listing("3", "Üç", "https://x/3", source_url=imported),
+    ])
+
+    assert db.source_counts() == [
+        (source_key(imported), 1),
+        (source_key(carsi), 2),
+    ]
+
+
+def test_delete_source_is_permanent_and_keeps_other_sources(tmp_path):
+    path = tmp_path / "delete-source.sqlite"
+    db = DB(path)
+    carsi = "https://remax.com.tr/tr/ofis/detay/carsi"
+    carsi_2 = "https://remax.com.tr/tr/ofis/detay/carsi-2"
+    db.upsert([
+        Listing("1", "Çarşı", "https://x/1", source_url=carsi),
+        Listing("2", "Çarşı 2", "https://x/2", source_url=carsi_2),
+    ])
+
+    assert db.delete_source(carsi + "?tab=portfoylerimiz") == 1
+
+    reopened = DB(path)
+    assert [(item.source_url, item.listing_id) for item in reopened.all()] == [
+        (source_key(carsi_2), "2"),
+    ]
+
+
+def test_delete_selected_deduplicates_identities(tmp_path):
+    db = DB(tmp_path / "delete-selected.sqlite")
+    carsi = "https://remax.com.tr/tr/ofis/detay/carsi"
+    imported = "excel://import"
+    db.upsert([
+        Listing("1", "Bir", "https://x/1", source_url=carsi),
+        Listing("2", "İki", "https://x/2", source_url=carsi),
+        Listing("1", "İçe Aktarılan", "https://x/imported", source_url=imported),
+    ])
+
+    assert db.delete_listings([
+        (carsi, "1"),
+        (carsi + "?tab=portfoylerimiz", "1"),
+        (imported, "1"),
+        (imported, "1"),
+    ]) == 2
+    assert [(item.source_url, item.listing_id) for item in db.all()] == [
+        (source_key(carsi), "2"),
+    ]
+
+
+def test_delete_all_returns_affected_count_and_clears_database(tmp_path):
+    path = tmp_path / "delete-all.sqlite"
+    db = DB(path)
+    db.upsert([
+        Listing("1", "Bir", "https://x/1", source_url="manual://entry"),
+        Listing("2", "İki", "https://x/2", source_url="excel://import"),
+    ])
+
+    assert db.delete_all() == 2
+    assert DB(path).all() == []
+    assert db.delete_all() == 0

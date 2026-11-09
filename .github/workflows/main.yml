@@ -1,112 +1,71 @@
-name: Build REMAX Ilan Botu
-
+name: REMAX desktop packages
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
-
+    tags: ['v*']
+permissions:
+  contents: write
 jobs:
-  windows-build:
-    name: Windows EXE
-    runs-on: windows-latest
-
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: Windows
+          - runner: macos-15
+            platform: macOS
+    runs-on: ${{ matrix.runner }}
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: '0'
+      QT_QPA_PLATFORM: offscreen
     steps:
-      - name: Kaynak kodu al
-        uses: actions/checkout@v4
-
-      - name: Python kur
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: "pip"
-
-      - name: Bagimliliklari kur
-        shell: powershell
+          python-version: '3.12'
+          cache: pip
+      - name: Install application and bundled browser
         run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-          pip install pyinstaller
-          $env:PLAYWRIGHT_BROWSERS_PATH="0"
+          python -m pip install -e ".[dev]"
           python -m playwright install chromium
-
-      - name: Testleri calistir
+      - name: Regression tests
+        run: python -m pytest -q
+      - name: Build desktop package
+        run: python -m PyInstaller --noconfirm --clean --windowed --name REMAX_Ilan_Botu --collect-all playwright --collect-data remax_bot launcher.py
+      - name: Windows offline package test
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          python -m pytest -q
-
-      - name: Windows EXE olustur
-        shell: powershell
+          $p = Start-Process -FilePath dist/REMAX_Ilan_Botu/REMAX_Ilan_Botu.exe -ArgumentList '--self-test' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Packaged offline self-test failed' }
+          Compress-Archive -Path dist/REMAX_Ilan_Botu -DestinationPath REMAX-Ilan-Botu-Windows.zip
+          (Get-FileHash REMAX-Ilan-Botu-Windows.zip -Algorithm SHA256).Hash.ToLower() + '  REMAX-Ilan-Botu-Windows.zip' | Set-Content REMAX-Ilan-Botu-Windows.zip.sha256 -Encoding ASCII
+      - name: macOS offline package test
+        if: runner.os == 'macOS'
         run: |
-          $env:PLAYWRIGHT_BROWSERS_PATH="0"
-
-          pyinstaller `
-            --noconfirm `
-            --clean `
-            --windowed `
-            --name "REMAX_Ilan_Botu" `
-            --icon "src/remax_bot/assets/app_icon.ico" `
-            --collect-all playwright `
-            --collect-data remax_bot `
-            launcher.py
-
-      - name: Windows paketini yukle
-        uses: actions/upload-artifact@v4
+          dist/REMAX_Ilan_Botu.app/Contents/MacOS/REMAX_Ilan_Botu --self-test
+          codesign --verify --deep --strict dist/REMAX_Ilan_Botu.app
+          ditto -c -k --norsrc --noextattr --keepParent dist/REMAX_Ilan_Botu.app REMAX-Ilan-Botu-macOS.zip
+          shasum -a 256 REMAX-Ilan-Botu-macOS.zip > REMAX-Ilan-Botu-macOS.zip.sha256
+          python -c 'import platform; print("Package architecture:", platform.machine())'
+      - uses: actions/upload-artifact@v4
         with:
-          name: REMAX-Ilan-Botu-Windows
-          path: dist/REMAX_Ilan_Botu/
+          name: remax-${{ matrix.platform }}
+          path: REMAX-Ilan-Botu-${{ matrix.platform }}.zip*
           if-no-files-found: error
-          retention-days: 30
-
-
-  macos-build:
-    name: macOS APP
-    runs-on: macos-latest
-
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
     steps:
-      - name: Kaynak kodu al
-        uses: actions/checkout@v4
-
-      - name: Python kur
-        uses: actions/setup-python@v5
+      - uses: actions/download-artifact@v4
         with:
-          python-version: "3.12"
-          cache: "pip"
-
-      - name: Bagimliliklari kur
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-          pip install pyinstaller
-
-      - name: Testleri calistir
-        run: |
-          python -m pytest -q
-
-      - name: macOS APP olustur
-        run: |
-          pyinstaller \
-            --noconfirm \
-            --clean \
-            --windowed \
-            --name "REMAX_Ilan_Botu" \
-            --icon "src/remax_bot/assets/app_icon.icns" \
-            --collect-data remax_bot \
-            --collect-all playwright \
-            --hidden-import playwright \
-            --hidden-import playwright.sync_api \
-            launcher.py
-
-      - name: APP dosyasini ZIP yap
-        run: |
-          cd dist
-          ditto -c -k --sequesterRsrc --keepParent \
-            REMAX_Ilan_Botu.app \
-            REMAX_Ilan_Botu_macOS.zip
-
-      - name: macOS paketini yukle
-        uses: actions/upload-artifact@v4
+          path: packages
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
         with:
-          name: REMAX-Ilan-Botu-macOS
-          path: dist/REMAX_Ilan_Botu_macOS.zip
-          if-no-files-found: error
-          retention-days: 30
+          name: REMAX İlan Botu — Windows ve Mac
+          body: Gerçek masaüstü uygulamaları ve gerekli Chromium bileşeni dahildir. Her iki pakette çevrimdışı Qt, SQLite ve tarayıcı testleri çalıştırılır; hiçbir gerçek hesap veya mesaj gönderimi kullanılmaz. Mac sürümü Apple noter onaylı değildir.
+          files: packages/*
+          fail_on_unmatched_files: true

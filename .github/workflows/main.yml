@@ -31,6 +31,10 @@ jobs:
           python -m playwright install chromium
       - name: Regression tests
         run: python -m pytest -q
+      - name: Preserve macOS browser bundle before freezing
+        if: runner.os == 'macOS'
+        run: |
+          python -c 'import playwright, pathlib, shutil, os; source=pathlib.Path(playwright.__file__).parent / "driver/package/.local-browsers"; shutil.move(str(source), os.environ["RUNNER_TEMP"] + "/remax-browsers")'
       - name: Build desktop package
         run: python -m PyInstaller --noconfirm --clean --windowed --name REMAX_Ilan_Botu --collect-all playwright --collect-data remax_bot launcher.py
       - name: Windows offline package test
@@ -44,6 +48,8 @@ jobs:
       - name: macOS offline package test
         if: runner.os == 'macOS'
         run: |
+          ditto "$RUNNER_TEMP/remax-browsers" dist/REMAX_Ilan_Botu.app/Contents/Resources/browsers
+          codesign --force --deep --sign - dist/REMAX_Ilan_Botu.app
           dist/REMAX_Ilan_Botu.app/Contents/MacOS/REMAX_Ilan_Botu --self-test
           codesign --verify --deep --strict dist/REMAX_Ilan_Botu.app
           ditto -c -k --norsrc --noextattr --keepParent dist/REMAX_Ilan_Botu.app REMAX-Ilan-Botu-macOS.zip

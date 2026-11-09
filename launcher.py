@@ -7,7 +7,10 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 if getattr(sys, "frozen", False):
-    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
+    if sys.platform == "darwin":
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(Path(sys.executable).parent.parent / "Resources" / "browsers")
+    else:
+        os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "0")
 
 
 def packaged_self_test():

@@ -433,7 +433,7 @@ def test_application_and_package_versions_match():
 
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
-    assert project["project"]["version"] == __version__ == "0.43.0"
+    assert project["project"]["version"] == __version__
 
 
 def test_all_embedded_browser_scripts_are_valid_javascript():
